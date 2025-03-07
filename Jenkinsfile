@@ -23,7 +23,7 @@ pipeline {
     parameters {
         string(name: 'JIRA_URL', description: 'Enter the JIRA URL')
         choice(name: 'ENVIRONMENT', choices: ['stg', 'prd'], description: 'Select the environment')
-        choice(name: 'PROJECT', choices: ['platform', 'another-project'], description: 'Select the project folder')
+        choice(name: 'PROJECT', choices: ['platform', 'payment', 'coin'], description: 'Select the project folder')
         choice(name: 'KEYDB_FOLDER', choices: ['keydb-payment', 'another-keydb'], description: 'Select the KeyDB folder')
         string(name: 'KEY_NAME', description: 'Enter the Redis key pattern to delete')
     }
