@@ -24,7 +24,7 @@ pipeline {
     }
 
     environment {
-        GIT_CREDENTIALS_ID = 'github-ajaib'  // Replace with your Jenkins credential ID
+        // GIT_CREDENTIALS_ID = 'github-ajaib'  // Replace with your Jenkins credential ID
         REPO_URL = 'https://github.com/ongkyokta/redis-key.git'  // Replace with your actual repo URL
     }
 
@@ -43,7 +43,7 @@ pipeline {
                 container('redis-cli') {
                     deleteDir()  // Clean workspace
                     withCredentials([usernamePassword(credentialsId: env.GIT_CREDENTIALS_ID, usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
-                        sh 'git clone https://${GIT_USERNAME}:${GIT_PASSWORD}@${REPO_URL} .'
+                        sh "git clone ${REPO_URL} ."
                     }
                 }
             }
