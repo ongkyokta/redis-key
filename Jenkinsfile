@@ -6,6 +6,11 @@ pipeline {
             kind: Pod
             spec:
               containers:
+              - name: git-cli
+                image: alpine/git
+                command:
+                - cat
+                tty: true
               - name: redis-cli
                 image: redis:latest
                 command:
@@ -24,30 +29,18 @@ pipeline {
     }
 
     environment {
-        REPO_URL = 'https://github.com/ongkyokta/redis-key.git'  // Public GitHub repo (no credentials needed)
+        REPO_URL = 'https://github.com/ongkyokta/redis-key.git'  
     }
 
     stages {
-        stage('Extract JIRA Key') {
-            steps {
-                script {
-                    def jiraKey = params.JIRA_URL.tokenize('/').last()
-                    env.JIRA_KEY = jiraKey
-                    echo "✅ Extracted JIRA Key: ${env.JIRA_KEY}"
-                }
-            }
-        }
-
         stage('Clone Repository') {
             steps {
-                container('redis-cli') {
-                    deleteDir()  // Clean workspace
+                container('git-cli') { // Use Git container
+                    deleteDir()
                     echo "🔄 Cloning repository: ${REPO_URL}"
-                    
-                    // Clone without credentials (public repo)
                     sh "git clone ${REPO_URL} ."
 
-                    // Verify the repository was cloned
+                    // Verify that files are cloned
                     echo "📂 Listing cloned files:"
                     sh "ls -la"
                 }
@@ -58,8 +51,6 @@ pipeline {
             steps {
                 script {
                     def jsonFilePath = "${params.ENVIRONMENT}/${params.PROJECT}/${params.KEYDB_FOLDER}/keydb-platform.json"
-                    
-                    echo "🔍 Checking if Redis config file exists: ${jsonFilePath}"
 
                     if (!fileExists(jsonFilePath)) {
                         error "❌ Redis config file not found: ${jsonFilePath}"
@@ -67,10 +58,6 @@ pipeline {
 
                     env.REDIS_CONFIG_FILE = jsonFilePath
                     echo "✅ Redis config file found: ${jsonFilePath}"
-
-                    // Show contents for debugging
-                    echo "📜 Contents of Redis config file:"
-                    sh "cat ${jsonFilePath}"
                 }
             }
         }
@@ -85,22 +72,11 @@ pipeline {
                             def (host, port) = redis.split(":")
                             echo "🔎 Connecting to Redis: ${host}:${port}"
 
-                            // Check Redis connectivity before deletion
-                            def testConnection = sh(script: "redis-cli -h ${host} -p ${port} PING || echo 'NO_CONNECTION'", returnStdout: true).trim()
-
-                            if (testConnection == "PONG") {
-                                echo "✅ Successfully connected to Redis: ${host}:${port}"
-
-                                // Delete keys matching the pattern
-                                def deleteCommand = """
-                                redis-cli -h ${host} -p ${port} --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 redis-cli -h ${host} -p ${port} DEL
-                                """
-                                sh deleteCommand
-
-                                echo "✅ Keys deleted successfully from ${host}:${port}"
-                            } else {
-                                echo "❌ Unable to connect to Redis: ${host}:${port}. Skipping deletion for this instance."
-                            }
+                            def deleteCommand = """
+                            redis-cli -h ${host} -p ${port} --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 redis-cli -h ${host} -p ${port} DEL
+                            """
+                            
+                            sh deleteCommand
                         }
                     }
                 }
@@ -113,7 +89,7 @@ pipeline {
             echo '✅ Redis key deletion completed successfully!'
         }
         failure {
-            echo '❌ Redis key deletion failed. Please check logs for details.'
+            echo '❌ Redis key deletion failed.'
         }
     }
 }
