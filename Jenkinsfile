@@ -14,7 +14,11 @@ pipeline {
               - name: redis-cli
                 image: redis:alpine
                 command:
-                - cat
+                - sh
+                - -c
+                - |
+                  apk add --no-cache redis-cli;
+                  cat
                 tty: true
             """
         }
@@ -69,7 +73,11 @@ pipeline {
                             def (host, port) = redis.split(":")
                             echo "🔎 Connecting to Redis: ${host}:${port}"
 
-                            def testConnection = sh(script: "redis-cli -h ${host} -p ${port} PING || echo 'AUTH_REQUIRED'", returnStdout: true).trim()
+                            // 🔥 Stop pipeline if redis-cli is not found
+                            def testConnection = sh(script: "redis-cli -h ${host} -p ${port} PING || echo 'CLI_NOT_FOUND'", returnStdout: true).trim()
+                            if (testConnection == "CLI_NOT_FOUND") {
+                                error "❌ redis-cli command not found in the container. Failing pipeline."
+                            }
 
                             if (testConnection == "PONG") {
                                 echo "✅ No authentication needed for Redis: ${host}"
