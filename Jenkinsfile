@@ -28,33 +28,45 @@ pipeline {
         stage('Initialize Parameters') {
             steps {
                 script {
-                    // Clone Repository to Read Folder Structure
+                    // 🔄 Clone Repository to Read Folder Structure
                     container('git-cli') {
                         deleteDir()
                         sh "git clone ${REPO_URL} ."
                     }
 
-                    // 🔥 Get List of Projects from Folder Names
+                    // ✅ Get List of Projects from Folder Names
                     def projectList = sh(script: "ls -d stg/*/ prd/*/ | awk -F'/' '{print \$2}' | sort -u", returnStdout: true).trim().split("\n")
                     def projectChoices = projectList.join(",")
 
-                    // 🔥 Set Default Project (First One Found)
-                    def defaultProject = projectList[0] ?: "Select a Project"
-
-                    // 🔥 Define Active Choices Properties
+                    // ✅ Define Active Choices Parameters
                     properties([
                         parameters([
                             string(name: 'JIRA_URL', description: 'Enter the JIRA URL'),
                             choice(name: 'ENVIRONMENT', choices: ['stg', 'prd'], description: 'Select the environment'),
 
-                            // ✅ Dynamically Populate PROJECT Choices
-                            choice(name: 'PROJECT', choices: projectList, description: 'Select the project folder'),
+                            // ✅ Use Active Choices for Dynamic Project Selection
+                            [$class: 'ChoiceParameterDefinition', 
+                                name: 'PROJECT', 
+                                choices: projectChoices, 
+                                description: 'Select the project folder'],
 
-                            // ✅ Dynamically Populate KEYDB_FOLDER Based on Selected PROJECT
-                            dynamicChoiceParam('KEYDB_FOLDER', "Select the KeyDB folder", '''
-                                if (!PROJECT) return ["Select a project first"]
-                                return new File(WORKSPACE + "/" + ENVIRONMENT + "/" + PROJECT).list().findAll { it.isDirectory() }
-                            '''),
+                            // ✅ Use Active Choices for Dynamic KeyDB Folder Selection
+                            [$class: 'CascadeChoiceParameter', 
+                                name: 'KEYDB_FOLDER',
+                                referencedParameters: 'PROJECT',
+                                choiceType: 'PT_SINGLE_SELECT',
+                                script: [$class: 'GroovyScript',
+                                    script: [
+                                        sandbox: true,
+                                        script: '''
+                                        if (!PROJECT) return ["Select a project first"]
+                                        def keydbFolders = new File(WORKSPACE + "/" + ENVIRONMENT + "/" + PROJECT).list().findAll { it.isDirectory() }
+                                        return keydbFolders ?: ["No KeyDB Folders Found"]
+                                        '''
+                                    ]
+                                ],
+                                description: 'Select the KeyDB folder'
+                            ],
 
                             string(name: 'KEY_NAME', description: 'Enter the Redis key pattern to delete')
                         ])
