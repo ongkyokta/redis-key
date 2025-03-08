@@ -12,15 +12,9 @@ pipeline {
                 - cat
                 tty: true
               - name: redis-cli
-                image: redis:alpine
+                image: redis:latest
                 command:
-                - sh
-                - -c
-                - |
-                  apk add --no-cache redis redis-cli;
-                  which redis-cli;
-                  redis-cli --version;
-                  cat
+                - cat
                 tty: true
             """
         }
@@ -75,11 +69,8 @@ pipeline {
                             def (host, port) = redis.split(":")
                             echo "🔎 Connecting to Redis: ${host}:${port}"
 
-                            // 🔥 Dynamically find redis-cli path
-                            def redisCliPath = sh(script: "which redis-cli || echo 'CLI_NOT_FOUND'", returnStdout: true).trim()
-                            if (redisCliPath == "CLI_NOT_FOUND") {
-                                error "❌ redis-cli not found in container. Failing pipeline."
-                            }
+                            // 🔥 Use full path to redis-cli
+                            def redisCliPath = "/usr/local/bin/redis-cli"
 
                             def testConnection = sh(script: "${redisCliPath} -h ${host} -p ${port} PING || echo 'AUTH_REQUIRED'", returnStdout: true).trim()
 
