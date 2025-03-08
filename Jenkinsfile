@@ -17,8 +17,7 @@ pipeline {
                 - sh
                 - -c
                 - |
-                  export PATH=$PATH:/opt/bitnami/redis/bin;
-                  redis-cli --version;
+                  /opt/bitnami/redis/bin/redis-cli --version;
                   cat
                 tty: true
             """
