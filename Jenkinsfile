@@ -12,7 +12,7 @@ pipeline {
                 - cat
                 tty: true
               - name: redis-cli
-                image: bitnami/redis:latest
+                image: redis:alpine
                 command:
                 - cat
                 tty: true
@@ -85,13 +85,13 @@ pipeline {
                                 def redisPassword1 = ""
                                 def redisPassword2 = ""
 
-                                // 🔥 Retrieve both credentials before using them
+                                // 🔥 Retrieve credentials before using them
                                 withCredentials([
                                     string(credentialsId: 'redis-pass-1', variable: 'REDIS_PASSWORD_1'),
                                     string(credentialsId: 'redis-pass-2', variable: 'REDIS_PASSWORD_2')
                                 ]) {
-                                    redisPassword1 = REDIS_PASSWORD_1
-                                    redisPassword2 = REDIS_PASSWORD_2
+                                    redisPassword1 = env.REDIS_PASSWORD_1
+                                    redisPassword2 = env.REDIS_PASSWORD_2
                                 }
 
                                 if (redisPassword1?.trim()) {
