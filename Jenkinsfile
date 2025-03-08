@@ -69,10 +69,12 @@ pipeline {
                             def (host, port) = redis.split(":")
                             echo "🔎 Connecting to Redis: ${host}:${port}"
 
-                            // 🔥 Use full path to redis-cli
-                            def redisCliPath = "/usr/local/bin/redis-cli"
-
-                            def testConnection = sh(script: "${redisCliPath} -h ${host} -p ${port} PING || echo 'AUTH_REQUIRED'", returnStdout: true).trim()
+                            // 🔥 Run inside Redis container
+                            def redisCliPath = "redis-cli"
+                            def testConnection = ""
+                            container('redis-cli') {
+                                testConnection = sh(script: "${redisCliPath} -h ${host} -p ${port} PING || echo 'AUTH_REQUIRED'", returnStdout: true).trim()
+                            }
 
                             if (testConnection == "PONG") {
                                 echo "✅ No authentication needed for Redis: ${host}"
@@ -98,7 +100,10 @@ pipeline {
                                 }
 
                                 if (redisPassword1?.trim()) {
-                                    def testAuth1 = sh(script: "${redisCliPath} -h ${host} -p ${port} -a '${redisPassword1}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
+                                    def testAuth1 = ""
+                                    container('redis-cli') {
+                                        testAuth1 = sh(script: "${redisCliPath} -h ${host} -p ${port} -a '${redisPassword1}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
+                                    }
                                     if (testAuth1 == "PONG") {
                                         echo "✅ Authentication successful with redis-pass-1"
                                         authSuccess = true
@@ -111,7 +116,10 @@ pipeline {
                                 }
 
                                 if (!authSuccess && redisPassword2?.trim()) {
-                                    def testAuth2 = sh(script: "${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
+                                    def testAuth2 = ""
+                                    container('redis-cli') {
+                                        testAuth2 = sh(script: "${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
+                                    }
                                     if (testAuth2 == "PONG") {
                                         echo "✅ Authentication successful with redis-pass-2"
                                         authSuccess = true
