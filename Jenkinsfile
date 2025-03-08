@@ -30,13 +30,23 @@ pipeline {
                 script {
                     // 🔄 Clone Repository to Read Folder Structure
                     container('git-cli') {
-                        deleteDir()
-                        sh "git clone ${REPO_URL} ."
+                        sh "rm -rf ${WORKSPACE}/* ${WORKSPACE}/.* || true"
+                        sh "git clone --no-checkout ${REPO_URL} ."
+                        sh "git reset --hard"
                     }
 
-                    // ✅ Get List of Projects from Folder Names
-                    def projectList = sh(script: "ls -d stg/*/ prd/*/ | awk -F'/' '{print \$2}' | sort -u", returnStdout: true).trim().split("\n")
-                    def projectChoices = projectList.join(",")
+                    // ✅ Get List of Projects (Folders inside `stg/`)
+                    def projectList = sh(script: """
+                        ls -d stg/*/ 2>/dev/null | awk -F'/' '{print \$2}' | sort -u || echo "NO_PROJECTS"
+                    """, returnStdout: true).trim().split("\n").findAll { it != "NO_PROJECTS" }
+
+                    // ✅ Get List of KeyDB Folders (Inside Selected Project)
+                    def keydbList = projectList.collectEntries { project ->
+                        def keydbFolders = sh(script: """
+                            ls -d stg/${project}/*/ 2>/dev/null | awk -F'/' '{print \$3}' || echo "NO_KEYDB"
+                        """, returnStdout: true).trim().split("\n").findAll { it != "NO_KEYDB" }
+                        [project, keydbFolders]
+                    }
 
                     // ✅ Define Active Choices Parameters
                     properties([
@@ -44,13 +54,13 @@ pipeline {
                             string(name: 'JIRA_URL', description: 'Enter the JIRA URL'),
                             choice(name: 'ENVIRONMENT', choices: ['stg', 'prd'], description: 'Select the environment'),
 
-                            // ✅ Use Active Choices for Dynamic Project Selection
+                            // ✅ Active Choices for Dynamic Project Selection
                             [$class: 'ChoiceParameterDefinition', 
                                 name: 'PROJECT', 
-                                choices: projectChoices, 
+                                choices: projectList, 
                                 description: 'Select the project folder'],
 
-                            // ✅ Use Active Choices for Dynamic KeyDB Folder Selection
+                            // ✅ Active Choices for Dynamic KeyDB Folder Selection
                             [$class: 'CascadeChoiceParameter', 
                                 name: 'KEYDB_FOLDER',
                                 referencedParameters: 'PROJECT',
@@ -60,7 +70,7 @@ pipeline {
                                         sandbox: true,
                                         script: '''
                                         if (!PROJECT) return ["Select a project first"]
-                                        def keydbFolders = new File(WORKSPACE + "/" + ENVIRONMENT + "/" + PROJECT).list().findAll { it.isDirectory() }
+                                        def keydbFolders = new File(WORKSPACE + "/stg/" + PROJECT).list().findAll { it.isDirectory() }
                                         return keydbFolders ?: ["No KeyDB Folders Found"]
                                         '''
                                     ]
@@ -156,26 +166,6 @@ pipeline {
                                         }
                                     }
                                 }
-
-                                if (!authSuccess && redisPassword2?.trim()) {
-                                    def testAuth2 = ""
-                                    container('redis-cli') {
-                                        testAuth2 = sh(script: "${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
-                                    }
-                                    if (testAuth2 == "PONG") {
-                                        echo "✅ Authentication successful with redis-pass-2"
-                                        authSuccess = true
-                                        container('redis-cli') {
-                                            sh """
-                                            ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' DEL
-                                            """
-                                        }
-                                    }
-                                }
-
-                                if (!authSuccess) {
-                                    echo "❌ Authentication failed for Redis: ${host}. Skipping..."
-                                }
                             }
 
                             echo "✅ Processed Redis: ${host}:${port} from ${jsonFile}"
@@ -183,15 +173,6 @@ pipeline {
                     }
                 }
             }
-        }
-    }
-
-    post {
-        success {
-            echo '✅ Redis key deletion completed successfully for all JSON files!'
-        }
-        failure {
-            echo '❌ Redis key deletion failed. Please check logs.'
         }
     }
 }
