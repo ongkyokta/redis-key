@@ -71,9 +71,8 @@ pipeline {
 
                             // 🔥 Determine if Redis requires authentication
                             def credentialId = ""
-                            if (host == "10.199.2.31") { credentialId = "redis_pass_stg_1" }
-                            else if (host == "10.199.2.32") { credentialId = "redis_pass_stg_2" }
-                            else if (host == "10.199.2.33") { credentialId = "redis_pass_stg_3" }
+                            if (host == "10.199.2.31") { credentialId = "redis-pass-1" }
+                            else if (host == "10.199.2.32") { credentialId = "redis-pass-2" }
 
                             if (credentialId) {
                                 echo "🔒 Using authentication for Redis: ${host}"
