@@ -23,8 +23,19 @@ pipeline {
     parameters {
         string(name: 'JIRA_URL', description: 'Enter the JIRA URL')
         choice(name: 'ENVIRONMENT', choices: ['stg', 'prd'], description: 'Select the environment')
-        choice(name: 'PROJECT', choices: ['platform', 'payment', 'coin'], description: 'Select the project folder')
-        choice(name: 'KEYDB_FOLDER', choices: ['keydb-payment', 'keydb-shared-payment'], description: 'Select the KeyDB folder')
+
+        // Dynamic Choices for Project and KeyDB Folder
+        dynamicParam('PROJECT', "Select the project folder") {
+            return sh(script: "ls -d ${params.ENVIRONMENT}/*/ | awk -F'/' '{print \$2}' | uniq", returnStdout: true).trim().split("\n")
+        }
+        
+        dynamicParam('KEYDB_FOLDER', "Select the KeyDB folder") {
+            if (!params.PROJECT) {
+                return ["Select a project first"]
+            }
+            return sh(script: "ls -d ${params.ENVIRONMENT}/${params.PROJECT}/*/ | awk -F'/' '{print \$3}' | uniq", returnStdout: true).trim().split("\n")
+        }
+
         string(name: 'KEY_NAME', description: 'Enter the Redis key pattern to delete')
     }
 
@@ -41,7 +52,7 @@ pipeline {
                     sh "git clone ${REPO_URL} ."
 
                     echo "📂 Listing cloned files:"
-                    sh "ls -la ${params.ENVIRONMENT}/${params.PROJECT}/${params.KEYDB_FOLDER}"
+                    sh "ls -R ${params.ENVIRONMENT}/"
                 }
             }
         }
@@ -51,7 +62,7 @@ pipeline {
                 script {
                     def folderPath = "${params.ENVIRONMENT}/${params.PROJECT}/${params.KEYDB_FOLDER}"
                     
-                    // 🔥 Find all JSON files inside KEYDB_FOLDER
+                    // 🔥 Find all JSON files inside the KeyDB folder
                     def jsonFiles = sh(script: "ls ${folderPath}/*.json || echo 'NO_FILES'", returnStdout: true).trim().split('\n')
 
                     if (jsonFiles[0] == "NO_FILES") {
