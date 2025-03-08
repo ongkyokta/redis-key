@@ -17,7 +17,8 @@ pipeline {
                 - sh
                 - -c
                 - |
-                  apk add --no-cache redis;
+                  apk add --no-cache redis redis-cli;
+                  which redis-cli;
                   redis-cli --version;
                   cat
                 tty: true
@@ -74,17 +75,19 @@ pipeline {
                             def (host, port) = redis.split(":")
                             echo "🔎 Connecting to Redis: ${host}:${port}"
 
-                            // 🔥 Stop pipeline if redis-cli is not found
-                            def testConnection = sh(script: "/usr/bin/redis-cli -h ${host} -p ${port} PING || echo 'CLI_NOT_FOUND'", returnStdout: true).trim()
-                            if (testConnection == "CLI_NOT_FOUND") {
-                                error "❌ redis-cli command not found in the container. Failing pipeline."
+                            // 🔥 Dynamically find redis-cli path
+                            def redisCliPath = sh(script: "which redis-cli || echo 'CLI_NOT_FOUND'", returnStdout: true).trim()
+                            if (redisCliPath == "CLI_NOT_FOUND") {
+                                error "❌ redis-cli not found in container. Failing pipeline."
                             }
+
+                            def testConnection = sh(script: "${redisCliPath} -h ${host} -p ${port} PING || echo 'AUTH_REQUIRED'", returnStdout: true).trim()
 
                             if (testConnection == "PONG") {
                                 echo "✅ No authentication needed for Redis: ${host}"
                                 container('redis-cli') {
                                     sh """
-                                    /usr/bin/redis-cli -h ${host} -p ${port} --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 /usr/bin/redis-cli -h ${host} -p ${port} DEL
+                                    ${redisCliPath} -h ${host} -p ${port} --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 ${redisCliPath} -h ${host} -p ${port} DEL
                                     """
                                 }
                             } else {
@@ -104,26 +107,26 @@ pipeline {
                                 }
 
                                 if (redisPassword1?.trim()) {
-                                    def testAuth1 = sh(script: "/usr/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword1}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
+                                    def testAuth1 = sh(script: "${redisCliPath} -h ${host} -p ${port} -a '${redisPassword1}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
                                     if (testAuth1 == "PONG") {
                                         echo "✅ Authentication successful with redis-pass-1"
                                         authSuccess = true
                                         container('redis-cli') {
                                             sh """
-                                            /usr/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword1}' --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 /usr/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword1}' DEL
+                                            ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword1}' --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword1}' DEL
                                             """
                                         }
                                     }
                                 }
 
                                 if (!authSuccess && redisPassword2?.trim()) {
-                                    def testAuth2 = sh(script: "/usr/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword2}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
+                                    def testAuth2 = sh(script: "${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
                                     if (testAuth2 == "PONG") {
                                         echo "✅ Authentication successful with redis-pass-2"
                                         authSuccess = true
                                         container('redis-cli') {
                                             sh """
-                                            /usr/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword2}' --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 /usr/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword2}' DEL
+                                            ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' DEL
                                             """
                                         }
                                     }
