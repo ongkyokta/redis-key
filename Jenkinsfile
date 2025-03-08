@@ -12,7 +12,7 @@ pipeline {
                 - cat
                 tty: true
               - name: redis-cli
-                image: redis:latest
+                image: bitnami/redis:latest
                 command:
                 - cat
                 tty: true
@@ -85,13 +85,16 @@ pipeline {
                                 def redisPassword1 = ""
                                 def redisPassword2 = ""
 
-                                withCredentials([string(credentialsId: 'redis-pass-1', variable: 'REDIS_PASSWORD_1'),
-                                                 string(credentialsId: 'redis-pass-2', variable: 'REDIS_PASSWORD_2')]) {
+                                // 🔥 Retrieve both credentials before using them
+                                withCredentials([
+                                    string(credentialsId: 'redis-pass-1', variable: 'REDIS_PASSWORD_1'),
+                                    string(credentialsId: 'redis-pass-2', variable: 'REDIS_PASSWORD_2')
+                                ]) {
                                     redisPassword1 = REDIS_PASSWORD_1
                                     redisPassword2 = REDIS_PASSWORD_2
                                 }
 
-                                if (redisPassword1) {
+                                if (redisPassword1?.trim()) {
                                     def testAuth1 = sh(script: "redis-cli -h ${host} -p ${port} -a '${redisPassword1}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
                                     if (testAuth1 == "PONG") {
                                         echo "✅ Authentication successful with redis-pass-1"
@@ -104,7 +107,7 @@ pipeline {
                                     }
                                 }
 
-                                if (!authSuccess && redisPassword2) {
+                                if (!authSuccess && redisPassword2?.trim()) {
                                     def testAuth2 = sh(script: "redis-cli -h ${host} -p ${port} -a '${redisPassword2}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
                                     if (testAuth2 == "PONG") {
                                         echo "✅ Authentication successful with redis-pass-2"
