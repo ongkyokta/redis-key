@@ -12,12 +12,13 @@ pipeline {
                 - cat
                 tty: true
               - name: redis-cli
-                image: bitnami/redis:latest
+                image: redis:alpine
                 command:
                 - sh
                 - -c
                 - |
-                  /opt/bitnami/redis/bin/redis-cli --version;
+                  apk add --no-cache redis;
+                  redis-cli --version;
                   cat
                 tty: true
             """
@@ -74,7 +75,7 @@ pipeline {
                             echo "🔎 Connecting to Redis: ${host}:${port}"
 
                             // 🔥 Stop pipeline if redis-cli is not found
-                            def testConnection = sh(script: "/opt/bitnami/redis/bin/redis-cli -h ${host} -p ${port} PING || echo 'CLI_NOT_FOUND'", returnStdout: true).trim()
+                            def testConnection = sh(script: "/usr/bin/redis-cli -h ${host} -p ${port} PING || echo 'CLI_NOT_FOUND'", returnStdout: true).trim()
                             if (testConnection == "CLI_NOT_FOUND") {
                                 error "❌ redis-cli command not found in the container. Failing pipeline."
                             }
@@ -83,7 +84,7 @@ pipeline {
                                 echo "✅ No authentication needed for Redis: ${host}"
                                 container('redis-cli') {
                                     sh """
-                                    /opt/bitnami/redis/bin/redis-cli -h ${host} -p ${port} --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 /opt/bitnami/redis/bin/redis-cli -h ${host} -p ${port} DEL
+                                    /usr/bin/redis-cli -h ${host} -p ${port} --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 /usr/bin/redis-cli -h ${host} -p ${port} DEL
                                     """
                                 }
                             } else {
@@ -103,26 +104,26 @@ pipeline {
                                 }
 
                                 if (redisPassword1?.trim()) {
-                                    def testAuth1 = sh(script: "/opt/bitnami/redis/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword1}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
+                                    def testAuth1 = sh(script: "/usr/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword1}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
                                     if (testAuth1 == "PONG") {
                                         echo "✅ Authentication successful with redis-pass-1"
                                         authSuccess = true
                                         container('redis-cli') {
                                             sh """
-                                            /opt/bitnami/redis/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword1}' --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 /opt/bitnami/redis/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword1}' DEL
+                                            /usr/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword1}' --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 /usr/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword1}' DEL
                                             """
                                         }
                                     }
                                 }
 
                                 if (!authSuccess && redisPassword2?.trim()) {
-                                    def testAuth2 = sh(script: "/opt/bitnami/redis/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword2}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
+                                    def testAuth2 = sh(script: "/usr/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword2}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
                                     if (testAuth2 == "PONG") {
                                         echo "✅ Authentication successful with redis-pass-2"
                                         authSuccess = true
                                         container('redis-cli') {
                                             sh """
-                                            /opt/bitnami/redis/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword2}' --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 /opt/bitnami/redis/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword2}' DEL
+                                            /usr/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword2}' --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 /usr/bin/redis-cli -h ${host} -p ${port} -a '${redisPassword2}' DEL
                                             """
                                         }
                                     }
