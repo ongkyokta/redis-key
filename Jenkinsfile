@@ -8,14 +8,12 @@ pipeline {
               containers:
               - name: git-cli
                 image: alpine/git
-                command:
-                - cat
+                command: [ "cat" ]
                 tty: true
               - name: redis-cli
                 image: redis:7.0.5-alpine
-                - sleep
-                args:
-                - "infinity"
+                command: [ "sleep" ]
+                args: [ "infinity" ]
                 tty: true
             """
         }
@@ -96,7 +94,7 @@ pipeline {
 
         stage('Delete Redis Keys') {
             steps {
-                container('redis-cli') {  // ✅ Run inside redis-cli container
+                container('redis-cli') {
                     script {
                         def redisInstances = env.REDIS_INSTANCES.split(',')
                         def keysToDelete = env.KEYS_TO_DELETE.split(',')
