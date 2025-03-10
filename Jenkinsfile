@@ -24,35 +24,11 @@ pipeline {
         string(name: 'JIRA_URL', description: 'Enter the JIRA URL')
         choice(name: 'ENVIRONMENT', choices: ['stg', 'prd'], description: 'Select the environment')
 
-        // Static PROJECT choices
+        // Active Choice parameter for dynamic folder detection
         choice(name: 'PROJECT', choices: ['platform', 'payment', 'coin'], description: 'Select the project folder')
 
-        // Active Choice parameter for KEYDB_FOLDER
-        activeChoiceParam('KEYDB_FOLDER') {
-            description('Select the KeyDB folder based on selected project')
-            filterable(true)
-            choiceType('PT_CHECKBOX')
-            groovyScript {
-                script("""
-                    def project = params.PROJECT
-                    def keydbFolders = []
-
-                    // Fetch available KeyDB folders dynamically from the stg/{PROJECT}/ directory
-                    try {
-                        def folders = sh(script: "ls -d stg/${project}/*/ 2>/dev/null || echo 'NO_FOLDERS'", returnStdout: true).trim()
-                        if (folders != 'NO_FOLDERS') {
-                            keydbFolders = folders.split("\\n").collect { it.tokenize("/")[-1] }
-                        } else {
-                            keydbFolders = ['No KeyDB folders found']
-                        }
-                    } catch (Exception e) {
-                        keydbFolders = ['Error fetching KeyDB folders']
-                    }
-
-                    return keydbFolders
-                """)
-            }
-        }
+        // Placeholder for dynamic KEYDB_FOLDER (will be replaced dynamically)
+        string(name: 'KEYDB_FOLDER', defaultValue: '', description: 'Auto-detected KeyDB folder based on selected Project')
 
         string(name: 'KEY_NAME', description: 'Enter the Redis key pattern to delete')
     }
@@ -62,12 +38,38 @@ pipeline {
     }
 
     stages {
+        stage('Detect KeyDB Folders') {
+            steps {
+                container('git-cli') {
+                    script {
+                        echo "🔄 Cloning repository: ${REPO_URL}"
+                        deleteDir()
+                        sh "git clone ${REPO_URL} ."
+
+                        def project = params.PROJECT
+                        def keydbFoldersRaw = sh(script: "ls -d stg/${project}/*/ 2>/dev/null || echo 'NO_FOLDERS'", returnStdout: true).trim()
+
+                        def keydbFolders = keydbFoldersRaw.split("\n").collect { it.tokenize("/")[-1] }
+                        if (keydbFolders[0] == "NO_FOLDERS") {
+                            keydbFolders = ["No KeyDB folders found"]
+                        }
+
+                        echo "✅ Found KeyDB Folders: ${keydbFolders}"
+
+                        // Add KEYDB_FOLDER choices dynamically
+                        currentBuild.rawBuild.addAction(new ParametersAction(
+                            new ChoiceParameterDefinition('KEYDB_FOLDER', keydbFolders, 'Select the KeyDB folder')
+                        ))
+                    }
+                }
+            }
+        }
+
         stage('Locate & Process Redis Config Files') {
             steps {
                 script {
-                    def folderPath = "${params.ENVIRONMENT}/${params.PROJECT}/${params.KEYDB_FOLDER}"
+                    def folderPath = "stg/${params.PROJECT}/${params.KEYDB_FOLDER}"
 
-                    // 🔥 Find all JSON files inside KEYDB_FOLDER
                     def jsonFiles = sh(script: "ls ${folderPath}/*.json 2>/dev/null || echo 'NO_FILES'", returnStdout: true).trim().split("\n")
 
                     if (jsonFiles[0] == "NO_FILES") {
@@ -85,7 +87,6 @@ pipeline {
                             def (host, port) = redis.split(":")
                             echo "🔎 Connecting to Redis: ${host}:${port}"
 
-                            // 🔥 Run inside Redis container
                             def redisCliPath = "redis-cli"
                             def testConnection = ""
                             container('redis-cli') {
@@ -106,7 +107,6 @@ pipeline {
                                 def redisPassword1 = ""
                                 def redisPassword2 = ""
 
-                                // 🔥 Retrieve credentials before using them
                                 withCredentials([
                                     string(credentialsId: 'redis-pass-1', variable: 'REDIS_PASSWORD_1'),
                                     string(credentialsId: 'redis-pass-2', variable: 'REDIS_PASSWORD_2')
