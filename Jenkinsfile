@@ -69,28 +69,70 @@ pipeline {
                             def (host, port) = redis.split(":")
                             echo "🔎 Connecting to Redis: ${host}:${port}"
 
-                            // 🔥 Determine if Redis requires authentication
-                            def credentialId = ""
-                            if (host == "10.199.2.31") { credentialId = "redis-pass-1" }
-                            else if (host == "10.199.2.32") { credentialId = "redis-pass-2" }
+                            // 🔥 Run inside Redis container
+                            def redisCliPath = "redis-cli"
+                            def testConnection = ""
+                            container('redis-cli') {
+                                testConnection = sh(script: "${redisCliPath} -h ${host} -p ${port} PING || echo 'AUTH_REQUIRED'", returnStdout: true).trim()
+                            }
 
-                            if (credentialId) {
-                                echo "🔒 Using authentication for Redis: ${host}"
-                                withCredentials([string(credentialsId: credentialId, variable: 'REDIS_PASSWORD')]) {
-                                    def deleteCommand = """
-                                    redis-cli -h ${host} -p ${port} -a '${REDIS_PASSWORD}' --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 redis-cli -h ${host} -p ${port} -a '${REDIS_PASSWORD}' DEL
+                            if (testConnection == "PONG") {
+                                echo "✅ No authentication needed for Redis: ${host}"
+                                container('redis-cli') {
+                                    sh """
+                                    ${redisCliPath} -h ${host} -p ${port} --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 ${redisCliPath} -h ${host} -p ${port} DEL
                                     """
-                                    container('redis-cli') {
-                                        sh deleteCommand
-                                    }
                                 }
                             } else {
-                                echo "🔓 No authentication needed for Redis: ${host}"
-                                def deleteCommand = """
-                                redis-cli -h ${host} -p ${port} --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 redis-cli -h ${host} -p ${port} DEL
-                                """
-                                container('redis-cli') {
-                                    sh deleteCommand
+                                echo "🔒 Authentication required for Redis: ${host}"
+
+                                def authSuccess = false
+                                def redisPassword1 = ""
+                                def redisPassword2 = ""
+
+                                // 🔥 Retrieve credentials before using them
+                                withCredentials([
+                                    string(credentialsId: 'redis-pass-1', variable: 'REDIS_PASSWORD_1'),
+                                    string(credentialsId: 'redis-pass-2', variable: 'REDIS_PASSWORD_2')
+                                ]) {
+                                    redisPassword1 = env.REDIS_PASSWORD_1
+                                    redisPassword2 = env.REDIS_PASSWORD_2
+                                }
+
+                                if (redisPassword1?.trim()) {
+                                    def testAuth1 = ""
+                                    container('redis-cli') {
+                                        testAuth1 = sh(script: "${redisCliPath} -h ${host} -p ${port} -a '${redisPassword1}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
+                                    }
+                                    if (testAuth1 == "PONG") {
+                                        echo "✅ Authentication successful with redis-pass-1"
+                                        authSuccess = true
+                                        container('redis-cli') {
+                                            sh """
+                                            ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword1}' --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword1}' DEL
+                                            """
+                                        }
+                                    }
+                                }
+
+                                if (!authSuccess && redisPassword2?.trim()) {
+                                    def testAuth2 = ""
+                                    container('redis-cli') {
+                                        testAuth2 = sh(script: "${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
+                                    }
+                                    if (testAuth2 == "PONG") {
+                                        echo "✅ Authentication successful with redis-pass-2"
+                                        authSuccess = true
+                                        container('redis-cli') {
+                                            sh """
+                                            ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' DEL
+                                            """
+                                        }
+                                    }
+                                }
+
+                                if (!authSuccess) {
+                                    echo "❌ Authentication failed for Redis: ${host}. Skipping..."
                                 }
                             }
 
