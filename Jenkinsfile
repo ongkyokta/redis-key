@@ -38,14 +38,12 @@ pipeline {
                     def projectPath = "${WORKSPACE_PATH}/${params.PROJECT}/keydb-shared-payment"
                     echo "🔍 Checking for files in: ${projectPath}"
 
-                    // Locate config.json (for Redis instances)
                     def configFile = "${projectPath}/config.json"
                     if (!fileExists(configFile)) {
                         error "❌ config.json file not found in ${projectPath}."
                     }
                     echo "✅ Found config.json"
 
-                    // Read and validate Redis instances from config.json
                     def redisConfig = readJSON(file: configFile)
                     if (!redisConfig.containsKey("redis_instances") || redisConfig.redis_instances.isEmpty()) {
                         error "❌ Invalid or missing 'redis_instances' in config.json"
@@ -53,14 +51,12 @@ pipeline {
                     def redisInstances = redisConfig.redis_instances
                     echo "Detected Redis instances: ${redisInstances.join(', ')}"
 
-                    // Locate JIRA ticket JSON file (e.g., DEVOPS-1111.json)
                     def ticketFile = "${projectPath}/${env.JIRA_KEY}.json"
                     if (!fileExists(ticketFile)) {
                         error "❌ Ticket file ${env.JIRA_KEY}.json not found."
                     }
                     echo "✅ Found ticket file: ${ticketFile}"
 
-                    // Read and validate keys from JIRA ticket file
                     def ticketData = readJSON(file: ticketFile)
                     if (!ticketData.containsKey("keys") || ticketData.keys.isEmpty()) {
                         error "❌ Invalid or missing 'keys' in ${env.JIRA_KEY}.json"
@@ -68,7 +64,6 @@ pipeline {
                     def keysToDelete = ticketData.keys
                     echo "Keys to delete: ${keysToDelete.join(', ')}"
 
-                    // Store in environment variables for the next stage
                     env.REDIS_INSTANCES = redisInstances.join(',')
                     env.KEYS_TO_DELETE = keysToDelete.join(',')
                 }
@@ -86,9 +81,20 @@ pipeline {
                         echo "🔎 Connecting to Redis: ${host}:${port}"
 
                         keysToDelete.each { key ->
-                            echo "🔑 Deleting key: ${key} from Redis instance: ${host}:${port}"
-                            def redisCliPath = "redis-cli"
+                            echo "🔍 Checking if key exists: ${key} on Redis: ${host}:${port}"
 
+                            def redisCliPath = "redis-cli"
+                            def checkKeyExists = sh(
+                                script: "${redisCliPath} -h ${host} -p ${port} --scan --pattern '${key}' | wc -l",
+                                returnStdout: true
+                            ).trim()
+
+                            if (checkKeyExists == "0") {
+                                echo "❌ Key not found: ${key} in Redis ${host}:${port}"
+                                return
+                            }
+
+                            echo "🔑 Deleting key: ${key} from Redis instance: ${host}:${port}"
                             def testConnection = sh(
                                 script: "${redisCliPath} -h ${host} -p ${port} PING || echo 'AUTH_REQUIRED'",
                                 returnStdout: true
