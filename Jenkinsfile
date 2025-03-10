@@ -8,12 +8,13 @@ pipeline {
               containers:
               - name: git-cli
                 image: alpine/git
-                command: [ "cat" ]
+                command:
+                - cat
                 tty: true
               - name: redis-cli
-                image: redis:7.0.5-alpine
-                command: [ "sleep" ]
-                args: [ "infinity" ]
+                image: redis:latest
+                command:
+                - cat
                 tty: true
             """
         }
