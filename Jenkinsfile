@@ -102,12 +102,12 @@ pipeline {
                         redisInstances.each { redisInstance ->
                             def parts = redisInstance.split(":")
                             def host = parts[0].trim()
-                            def port = parts.length > 1 ? parts[1].trim() : "6379"  // Default to 6379 if no port
+                            def port = parts.length > 1 ? parts[1].trim() : "6390"  // Default to 6379 if missing
 
                             echo "🔎 Connecting to Redis: ${host}:${port}"
 
                             keysToDelete.each { key ->
-                                key = key.replaceAll('"', '').trim()  // ✅ Ensure correct formatting
+                                key = key.replaceAll('"', '').trim()  // ✅ Remove unnecessary quotes
 
                                 echo "🔍 Checking if key exists: ${key} on Redis: ${host}:${port}"
 
@@ -190,15 +190,6 @@ pipeline {
                     }
                 }
             }
-        }
-    }
-
-    post {
-        success {
-            echo '✅ Redis key deletion completed successfully for all JSON files!'
-        }
-        failure {
-            echo '❌ Redis key deletion failed. Please check logs.'
         }
     }
 }
