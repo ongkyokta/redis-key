@@ -100,17 +100,22 @@ pipeline {
                         def keysToDelete = env.KEYS_TO_DELETE.split(',')
 
                         redisInstances.each { redisInstance ->
-                            def (host, port) = redisInstance.split(":")
+                            def parts = redisInstance.split(":")
+                            def host = parts[0].trim()
+                            def port = parts.length > 1 ? parts[1].trim() : "6379"  // Default to 6379 if no port
+
                             echo "🔎 Connecting to Redis: ${host}:${port}"
 
                             keysToDelete.each { key ->
-                                key = key.replaceAll('"', '').trim()  // ✅ Ensure proper formatting of key name
+                                key = key.replaceAll('"', '').trim()  // ✅ Ensure correct formatting
 
                                 echo "🔍 Checking if key exists: ${key} on Redis: ${host}:${port}"
 
-                                // ✅ Fix incorrect command formatting (space between -h and -p)
+                                // ✅ Fixed Redis CLI command formatting
                                 def checkKeyExists = sh(
-                                    script: "redis-cli -h ${host} -p ${port} --scan --pattern '${key}' | wc -l",
+                                    script: """
+                                    redis-cli -h ${host} -p ${port} --scan --pattern '${key}' | wc -l
+                                    """,
                                     returnStdout: true
                                 ).trim()
 
