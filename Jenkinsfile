@@ -27,6 +27,7 @@ pipeline {
     environment {
         REPO_URL = 'https://github.com/ongkyokta/redis-key.git'
         WORKSPACE_PATH = "${env.WORKSPACE}/stg"
+        DEFAULT_REDIS_PORT = "6390"
     }
 
     stages {
@@ -69,7 +70,9 @@ pipeline {
                         if (!redisConfig.containsKey("redis_instances") || redisConfig.redis_instances.isEmpty()) {
                             error "❌ Invalid or missing 'redis_instances' in config.json"
                         }
-                        def redisInstances = redisConfig.redis_instances.collect { it.trim() + ":6390" }
+                        
+                        // Ensure all IPs have the default Redis port (6390)
+                        def redisInstances = redisConfig.redis_instances.collect { it.trim() + ":" + env.DEFAULT_REDIS_PORT }
                         echo "Detected Redis instances: ${redisInstances.join(', ')}"
 
                         def ticketFile = "${projectPath}/${env.JIRA_KEY}.json"
@@ -82,7 +85,8 @@ pipeline {
                         if (!ticketData.containsKey("keys") || ticketData.keys.isEmpty()) {
                             error "❌ Invalid or missing 'keys' in ${env.JIRA_KEY}.json"
                         }
-                        def keysToDelete = ticketData.keys
+                        def keysToDelete = ticketData.keys.collect { it.trim() } // Trim keys to prevent issues
+
                         echo "Keys to delete: ${keysToDelete.join(', ')}"
 
                         env.REDIS_INSTANCES = redisInstances.join(',')
@@ -106,13 +110,12 @@ pipeline {
                             keysToDelete.each { key ->
                                 echo "🔍 Checking if key exists: ${key} on Redis: ${host}:${port}"
 
-                                // Ensure correct formatting of the Redis command
-                                def checkKeyExists = sh(
-                                    script: "redis-cli -h ${host} -p ${port} --scan --pattern '${key}' | wc -l",
-                                    returnStdout: true
-                                ).trim()
+                                // Log the exact command being run
+                                def redisCommand = "redis-cli -h ${host} -p ${port} --scan --pattern '${key}' | wc -l"
+                                echo "✅ Running Redis check command: ${redisCommand}"
 
-                                echo "✅ Redis command to check: redis-cli -h ${host} -p ${port} --scan --pattern '${key}'"
+                                // Run command to check key existence
+                                def checkKeyExists = sh(script: redisCommand, returnStdout: true).trim()
 
                                 if (checkKeyExists == "0") {
                                     echo "❌ Key not found: ${key} in Redis ${host}:${port}"
