@@ -136,9 +136,9 @@ pipeline {
                                 if (testConnection == "PONG") {
                                     echo "✅ No authentication needed for Redis: ${host}"
                                     sh """
-                                    while read -r key; do
+                                    printf '%s\n' '${keyList}' | while read -r key; do
                                         redis-cli -h ${host} -p ${port} DEL "\$key"
-                                    done <<< "${keyList}"
+                                    done
                                     """
                                 } else {
                                     echo "🔒 Authentication required for Redis: ${host}"
