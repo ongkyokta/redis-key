@@ -24,13 +24,8 @@ pipeline {
         string(name: 'JIRA_URL', description: 'Enter the JIRA URL')
         choice(name: 'ENVIRONMENT', choices: ['stg', 'prd'], description: 'Select the environment')
         choice(name: 'PROJECT', choices: ['platform', 'payment', 'coin'], description: 'Select the project folder')
-        
-        // Dynamically populate KEYDB_FOLDER based on the folder structure in the repo
-        choice(name: 'KEYDB_FOLDER', 
-            choices: [],
-            description: 'Select the KeyDB folder'
-        )
-
+        // Initially, leave choices empty. They will be updated dynamically.
+        choice(name: 'KEYDB_FOLDER', choices: ['Select a project first'], description: 'Select the KeyDB folder')
         string(name: 'KEY_NAME', description: 'Enter the Redis key pattern to delete')
     }
 
@@ -52,25 +47,41 @@ pipeline {
             }
         }
 
-        stage('Locate & Process Redis Config Files') {
+        stage('Update KeyDB Folder Choices') {
             steps {
                 script {
-                    // Dynamically list KEYDB Folders under stg/{PROJECT}
-                    def keydbFolders = sh(script: "ls -d ${params.ENVIRONMENT}/${params.PROJECT}/*/ | awk -F'/' '{print \$NF}'", returnStdout: true).trim().split("\n")
+                    echo "📌 Fetching available KeyDB folders for project: ${params.PROJECT}"
+                    
+                    // 🔥 Dynamically list KEYDB Folders under stg/{PROJECT}
+                    def keydbFoldersRaw = sh(script: "ls -d ${params.ENVIRONMENT}/${params.PROJECT}/*/ 2>/dev/null || echo 'NO_FOLDERS'", returnStdout: true).trim()
+                    
+                    def keydbFolders = []
+                    
+                    if (keydbFoldersRaw != "NO_FOLDERS") {
+                        keydbFolders = keydbFoldersRaw.split("\n")*.tokenize("/")[-1] // Extract last directory name
+                    } else {
+                        keydbFolders = ["No KeyDB folders found"]
+                    }
 
-                    echo "✅ Found KEYDB Folders: ${keydbFolders}"
+                    echo "✅ Available KeyDB Folders: ${keydbFolders}"
 
-                    // Update the KEYDB_FOLDER choices dynamically
+                    // 🔄 Update the KEYDB_FOLDER choices dynamically
                     properties([
                         parameters([
                             choice(name: 'KEYDB_FOLDER', choices: keydbFolders, description: 'Select the KeyDB folder')
                         ])
                     ])
+                }
+            }
+        }
 
+        stage('Locate & Process Redis Config Files') {
+            steps {
+                script {
                     def folderPath = "${params.ENVIRONMENT}/${params.PROJECT}/${params.KEYDB_FOLDER}"
                     
                     // 🔥 Find all JSON files inside KEYDB_FOLDER
-                    def jsonFiles = sh(script: "ls ${folderPath}/*.json || echo 'NO_FILES'", returnStdout: true).trim().split('\n')
+                    def jsonFiles = sh(script: "ls ${folderPath}/*.json 2>/dev/null || echo 'NO_FILES'", returnStdout: true).trim().split("\n")
 
                     if (jsonFiles[0] == "NO_FILES") {
                         error "❌ No JSON files found in ${folderPath}. Please check the repository structure."
@@ -81,7 +92,7 @@ pipeline {
                     for (jsonFile in jsonFiles) {
                         echo "📜 Processing JSON file: ${jsonFile}"
 
-                        def redisInstances = sh(script: "cat ${jsonFile}", returnStdout: true).trim().split('\n')
+                        def redisInstances = sh(script: "cat ${jsonFile}", returnStdout: true).trim().split("\n")
 
                         for (redis in redisInstances) {
                             def (host, port) = redis.split(":")
