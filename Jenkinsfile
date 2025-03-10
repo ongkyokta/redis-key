@@ -104,20 +104,22 @@ pipeline {
                             echo "🔎 Connecting to Redis: ${host}:${port}"
 
                             keysToDelete.each { key ->
-                                echo "🔍 Checking if key exists: '${key}' on Redis: ${host}:${port}"
+                                key = key.replaceAll('"', '').trim()  // ✅ Ensure proper formatting of key name
 
-                                // ✅ Fix: Proper formatting of the Redis command
+                                echo "🔍 Checking if key exists: ${key} on Redis: ${host}:${port}"
+
+                                // ✅ Fix incorrect command formatting (space between -h and -p)
                                 def checkKeyExists = sh(
                                     script: "redis-cli -h ${host} -p ${port} --scan --pattern '${key}' | wc -l",
                                     returnStdout: true
                                 ).trim()
 
                                 if (checkKeyExists == "0") {
-                                    echo "❌ Key not found: '${key}' in Redis ${host}:${port}"
+                                    echo "❌ Key not found: ${key} in Redis ${host}:${port}"
                                     return
                                 }
 
-                                echo "🔑 Deleting key: '${key}' from Redis instance: ${host}:${port}"
+                                echo "🔑 Deleting key: ${key} from Redis instance: ${host}:${port}"
 
                                 def testConnection = sh(
                                     script: "redis-cli -h ${host} -p ${port} PING || echo 'AUTH_REQUIRED'",
@@ -177,12 +179,21 @@ pipeline {
                                     }
                                 }
 
-                                echo "✅ Deleted key: '${key}' from Redis: ${host}:${port}"
+                                echo "✅ Deleted key: ${key} from Redis: ${host}:${port}"
                             }
                         }
                     }
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ Redis key deletion completed successfully for all JSON files!'
+        }
+        failure {
+            echo '❌ Redis key deletion failed. Please check logs.'
         }
     }
 }
