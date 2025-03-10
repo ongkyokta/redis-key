@@ -4,7 +4,26 @@ pipeline {
     parameters {
         choice(name: 'PROJECT', choices: ['payment'], description: 'Select the project folder')
         string(name: 'KEY_NAME', description: 'Enter the Redis key pattern to delete')
-        string(name: 'KEYDB_FOLDER', defaultValue: '', description: 'Auto-detected KeyDB folder based on selected Project')
+        
+        // This is where Active Choices will be used to populate KEYDB_FOLDER dynamically
+        activeChoiceParam('KEYDB_FOLDER') {
+            description('Auto-detected KeyDB folder based on selected Project')
+            filterable()
+            groovyScript {
+                script("""
+                    def projectPath = "${WORKSPACE}/stg/${params.PROJECT}"
+                    def folders = []
+                    try {
+                        def keydbDirs = sh(script: "ls -d ${projectPath}/keydb*/", returnStdout: true).trim().split('\\n')
+                        folders = keydbDirs.collect { it.tokenize("/").last() }
+                    } catch (Exception e) {
+                        folders = []
+                    }
+                    return folders
+                """)
+                fallbackScript("return ['No folders found']")
+            }
+        }
     }
 
     environment {
@@ -35,25 +54,11 @@ pipeline {
                     // Log detected folders
                     echo "Detected folders: ${keydbFolders}"
 
-                    // Check if keydbFolders is empty using .size()
                     if (keydbFolders.size() == 0) {
                         error "❌ No KeyDB folders found in ${projectPath}."
                     }
 
                     echo "✅ Detected KeyDB Folders: ${keydbFolders.join(', ')}"
-
-                    // Dynamically update the KEYDB_FOLDER parameter
-                    // Setting parameter dynamically using choice
-                    def choiceArray = []
-                    keydbFolders.each { folder ->
-                        def folderName = folder.tokenize("/").last()
-                        choiceArray << folderName
-                    }
-
-                    // Update KEYDB_FOLDER dynamically
-                    currentBuild.rawBuild.addAction(new ParametersAction(
-                        new ChoiceParameterDefinition('KEYDB_FOLDER', choiceArray, 'Select the KeyDB folder')
-                    ))
                 }
             }
         }
