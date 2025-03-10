@@ -1,5 +1,24 @@
 pipeline {
-    agent any
+    agent {
+        kubernetes {
+            yaml """
+            apiVersion: v1
+            kind: Pod
+            spec:
+              containers:
+              - name: git-cli
+                image: alpine/git
+                command:
+                - cat
+                tty: true
+              - name: redis-cli
+                image: redis:latest
+                command:
+                - cat
+                tty: true
+            """
+        }
+    }
 
     parameters {
         string(name: 'JIRA_URL', description: 'Enter the JIRA URL')
