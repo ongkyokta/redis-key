@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     parameters {
-        choice(name: 'PROJECT', choices: ['platform', 'payment', 'coin'], description: 'Select the project folder')
+        choice(name: 'PROJECT', choices: ['payment'], description: 'Select the project folder')
         string(name: 'KEY_NAME', description: 'Enter the Redis key pattern to delete')
         string(name: 'KEYDB_FOLDER', defaultValue: '', description: 'Auto-detected KeyDB folder based on selected Project')
     }
