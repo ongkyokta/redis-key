@@ -12,7 +12,7 @@ pipeline {
                 - cat
                 tty: true
               - name: redis-cli
-                image: redis:7.0.5-alpine  # ✅ Ensure we use the right Redis image
+                image: redis:7.0.5-alpine  // ✅ Using Redis image with redis-cli
                 command:
                 - sleep
                 args:
@@ -97,7 +97,7 @@ pipeline {
 
         stage('Delete Redis Keys') {
             steps {
-                container('redis-cli') {  # ✅ Run inside redis-cli container
+                container('redis-cli') {  // ✅ Run inside redis-cli container
                     script {
                         def redisInstances = env.REDIS_INSTANCES.split(',')
                         def keysToDelete = env.KEYS_TO_DELETE.split(',')
