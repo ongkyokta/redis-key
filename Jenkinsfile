@@ -27,7 +27,6 @@ pipeline {
     environment {
         REPO_URL = 'https://github.com/ongkyokta/redis-key.git'
         WORKSPACE_PATH = "${env.WORKSPACE}/stg"
-        DEFAULT_REDIS_PORT = '6390'  // Enforce the default port for Redis
     }
 
     stages {
@@ -70,7 +69,7 @@ pipeline {
                         if (!redisConfig.containsKey("redis_instances") || redisConfig.redis_instances.isEmpty()) {
                             error "❌ Invalid or missing 'redis_instances' in config.json"
                         }
-                        def redisInstances = redisConfig.redis_instances.collect { it.trim() + ":${env.DEFAULT_REDIS_PORT}" }
+                        def redisInstances = redisConfig.redis_instances.collect { it.trim() + ":6390" }
                         echo "Detected Redis instances: ${redisInstances.join(', ')}"
 
                         def ticketFile = "${projectPath}/${env.JIRA_KEY}.json"
@@ -107,10 +106,13 @@ pipeline {
                             keysToDelete.each { key ->
                                 echo "🔍 Checking if key exists: ${key} on Redis: ${host}:${port}"
 
+                                // Ensure correct formatting of the Redis command and add debug
                                 def checkKeyExists = sh(
-                                    script: "redis-cli -h ${host} -p ${port} --scan --pattern '${key}' | wc -l",
+                                    script: "echo 'redis-cli -h ${host} -p ${port} --scan --pattern \"${key}\" | wc -l' && redis-cli -h ${host} -p ${port} --scan --pattern \"${key}\" | wc -l",
                                     returnStdout: true
                                 ).trim()
+
+                                echo "✅ Redis command to check: redis-cli -h ${host} -p ${port} --scan --pattern \"${key}\" | wc -l"
 
                                 if (checkKeyExists == "0") {
                                     echo "❌ Key not found: ${key} in Redis ${host}:${port}"
