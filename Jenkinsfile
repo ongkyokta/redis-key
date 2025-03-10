@@ -27,8 +27,32 @@ pipeline {
         // Static PROJECT choices
         choice(name: 'PROJECT', choices: ['platform', 'payment', 'coin'], description: 'Select the project folder')
 
-        // Default KEYDB_FOLDER choice, which will be updated dynamically
-        choice(name: 'KEYDB_FOLDER', choices: ['Select a project first'], description: 'Select the KeyDB folder')
+        // Active Choice parameter for KEYDB_FOLDER
+        activeChoiceParam('KEYDB_FOLDER') {
+            description('Select the KeyDB folder based on selected project')
+            filterable(true)
+            choiceType('PT_CHECKBOX')
+            groovyScript {
+                script("""
+                    def project = params.PROJECT
+                    def keydbFolders = []
+
+                    // Fetch available KeyDB folders dynamically from the stg/{PROJECT}/ directory
+                    try {
+                        def folders = sh(script: "ls -d stg/${project}/*/ 2>/dev/null || echo 'NO_FOLDERS'", returnStdout: true).trim()
+                        if (folders != 'NO_FOLDERS') {
+                            keydbFolders = folders.split("\\n").collect { it.tokenize("/")[-1] }
+                        } else {
+                            keydbFolders = ['No KeyDB folders found']
+                        }
+                    } catch (Exception e) {
+                        keydbFolders = ['Error fetching KeyDB folders']
+                    }
+
+                    return keydbFolders
+                """)
+            }
+        }
 
         string(name: 'KEY_NAME', description: 'Enter the Redis key pattern to delete')
     }
@@ -38,49 +62,6 @@ pipeline {
     }
 
     stages {
-        stage('Set KeyDB Folder Choices') {
-            steps {
-                container('git-cli') {
-                    script {
-                        echo "🔄 Cloning repository: ${REPO_URL}"
-                        sh "git clone ${REPO_URL} ."
-
-                        // Fetch the available PROJECT folders
-                        def keydbFoldersRaw = sh(script: "ls -d stg/${params.PROJECT}/*/ 2>/dev/null || echo 'NO_FOLDERS'", returnStdout: true).trim()
-
-                        def keydbFolders = []
-
-                        if (keydbFoldersRaw != "NO_FOLDERS") {
-                            // Extract folder names
-                            keydbFolders = keydbFoldersRaw.split("\n").collect { it.tokenize("/")[-1] }
-                        } else {
-                            keydbFolders = ["No KeyDB folders found"]
-                        }
-
-                        echo "✅ Found KeyDB Folders: ${keydbFolders}"
-
-                        // Dynamically set the choices for KEYDB_FOLDER before the pipeline starts
-                        currentBuild.rawBuild.addAction(new ParametersAction(
-                            new ChoiceParameterDefinition('KEYDB_FOLDER', keydbFolders, 'Select the KeyDB folder')
-                        ))
-                    }
-                }
-            }
-        }
-
-        stage('Clone Repository') {
-            steps {
-                container('git-cli') {
-                    deleteDir()
-                    echo "🔄 Cloning repository: ${REPO_URL}"
-                    sh "git clone ${REPO_URL} ."
-
-                    echo "📂 Listing cloned files:"
-                    sh "ls -la ${params.ENVIRONMENT}/${params.PROJECT}/"
-                }
-            }
-        }
-
         stage('Locate & Process Redis Config Files') {
             steps {
                 script {
