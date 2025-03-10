@@ -8,13 +8,12 @@ pipeline {
               containers:
               - name: git-cli
                 image: alpine/git
-                command:
-                - cat
+                command: [ "cat" ]
                 tty: true
               - name: redis-cli
-                image: redis:latest
-                command:
-                - cat
+                image: redis:7.0.5-alpine
+                command: [ "sleep" ]
+                args: [ "infinity" ]
                 tty: true
             """
         }
@@ -107,7 +106,7 @@ pipeline {
                             keysToDelete.each { key ->
                                 echo "🔍 Checking if key exists: ${key} on Redis: ${host}:${port}"
 
-                                // Corrected redis-cli command to avoid invalid formatting
+                                // Check if the key exists before deleting
                                 def checkKeyExists = sh(
                                     script: "redis-cli -h ${host} -p ${port} --scan --pattern '${key}' | wc -l",
                                     returnStdout: true
