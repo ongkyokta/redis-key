@@ -108,7 +108,7 @@ pipeline {
 
                                 // Check if the key exists before deleting
                                 def checkKeyExists = sh(
-                                    script: "redis-cli -h ${host} -p ${port} --scan --pattern '${key}' | wc -l",
+                                    script: "redis-cli -h ${host} -p ${port} --scan --pattern ${key} | wc -l",
                                     returnStdout: true
                                 ).trim()
 
@@ -127,7 +127,7 @@ pipeline {
                                 if (testConnection == "PONG") {
                                     echo "✅ No authentication needed for Redis: ${host}"
                                     sh """
-                                    redis-cli -h ${host} -p ${port} --scan --pattern '${key}' | xargs -r -n 1 redis-cli -h ${host} -p ${port} DEL
+                                    redis-cli -h ${host} -p ${port} --scan --pattern ${key} | xargs -r -n 1 redis-cli -h ${host} -p ${port} DEL
                                     """
                                 } else {
                                     echo "🔒 Authentication required for Redis: ${host}"
@@ -153,7 +153,7 @@ pipeline {
                                             echo "✅ Authentication successful with redis-pass-1"
                                             authSuccess = true
                                             sh """
-                                            redis-cli -h ${host} -p ${port} -a '${redisPassword1}' --scan --pattern '${key}' | xargs -r -n 1 redis-cli -h ${host} -p ${port} -a '${redisPassword1}' DEL
+                                            redis-cli -h ${host} -p ${port} -a '${redisPassword1}' --scan --pattern ${key} | xargs -r -n 1 redis-cli -h ${host} -p ${port} -a '${redisPassword1}' DEL
                                             """
                                         }
                                     }
@@ -167,7 +167,7 @@ pipeline {
                                             echo "✅ Authentication successful with redis-pass-2"
                                             authSuccess = true
                                             sh """
-                                            redis-cli -h ${host} -p ${port} -a '${redisPassword2}' --scan --pattern '${key}' | xargs -r -n 1 redis-cli -h ${host} -p ${port} -a '${redisPassword2}' DEL
+                                            redis-cli -h ${host} -p ${port} -a '${redisPassword2}' --scan --pattern ${key} | xargs -r -n 1 redis-cli -h ${host} -p ${port} -a '${redisPassword2}' DEL
                                             """
                                         }
                                     }
