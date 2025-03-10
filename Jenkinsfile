@@ -2,28 +2,8 @@ pipeline {
     agent any
 
     parameters {
+        string(name: 'JIRA_URL', description: 'Enter the JIRA URL')
         choice(name: 'PROJECT', choices: ['payment'], description: 'Select the project folder')
-        string(name: 'KEY_NAME', description: 'Enter the Redis key pattern to delete')
-        
-        // This is where Active Choices will be used to populate KEYDB_FOLDER dynamically
-        activeChoiceParam('KEYDB_FOLDER') {
-            description('Auto-detected KeyDB folder based on selected Project')
-            filterable()
-            groovyScript {
-                script("""
-                    def projectPath = "${WORKSPACE}/stg/${params.PROJECT}"
-                    def folders = []
-                    try {
-                        def keydbDirs = sh(script: "ls -d ${projectPath}/keydb*/", returnStdout: true).trim().split('\\n')
-                        folders = keydbDirs.collect { it.tokenize("/").last() }
-                    } catch (Exception e) {
-                        folders = []
-                    }
-                    return folders
-                """)
-                fallbackScript("return ['No folders found']")
-            }
-        }
     }
 
     environment {
@@ -42,23 +22,49 @@ pipeline {
             }
         }
 
-        stage('Detect KeyDB Folders') {
+        stage('Extract JIRA Key') {
             steps {
                 script {
-                    def projectPath = "${WORKSPACE_PATH}/${params.PROJECT}/"
-                    echo "🔍 Checking for directories in: ${projectPath}"
+                    // Extract the JIRA key from the URL (e.g., DEVOPS-1111)
+                    def jiraKey = params.JIRA_URL.tokenize('/').last()
+                    env.JIRA_KEY = jiraKey
+                    echo "Extracted JIRA Key: ${jiraKey}"
+                }
+            }
+        }
 
-                    // Get all subdirectories (keydb-* folders)
-                    def keydbFolders = sh(script: "ls -d ${projectPath}*/", returnStdout: true).trim().split("\n")
+        stage('Locate Redis Config and Ticket Files') {
+            steps {
+                script {
+                    def projectPath = "${WORKSPACE_PATH}/${params.PROJECT}/keydb-shared-payment"
+                    echo "🔍 Checking for files in: ${projectPath}"
 
-                    // Log detected folders
-                    echo "Detected folders: ${keydbFolders}"
-
-                    if (keydbFolders.size() == 0) {
-                        error "❌ No KeyDB folders found in ${projectPath}."
+                    // Locate config.json
+                    def configFile = "${projectPath}/config.json"
+                    if (!fileExists(configFile)) {
+                        error "❌ config.json file not found in ${projectPath}."
                     }
+                    echo "✅ Found config.json"
 
-                    echo "✅ Detected KeyDB Folders: ${keydbFolders.join(', ')}"
+                    // Load Redis instances from config.json
+                    def redisInstances = readJSON(file: configFile).redis_instances
+                    echo "Detected Redis instances: ${redisInstances.join(', ')}"
+
+                    // Locate the JIRA ticket JSON file (e.g., DEVOPS-1111.json)
+                    def ticketFile = "${projectPath}/${env.JIRA_KEY}.json"
+                    if (!fileExists(ticketFile)) {
+                        error "❌ Ticket file ${env.JIRA_KEY}.json not found."
+                    }
+                    echo "✅ Found ticket file: ${ticketFile}"
+
+                    // Read keys to delete from the JIRA ticket file
+                    def ticketData = readJSON(file: ticketFile)
+                    def keysToDelete = ticketData.keys
+                    echo "Keys to delete: ${keysToDelete.join(', ')}"
+
+                    // Store for use in the next stage
+                    env.REDIS_INSTANCES = redisInstances.join(',')
+                    env.KEYS_TO_DELETE = keysToDelete.join(',')
                 }
             }
         }
@@ -66,35 +72,22 @@ pipeline {
         stage('Delete Redis Keys') {
             steps {
                 script {
-                    echo "Selected KeyDB folder: ${params.KEYDB_FOLDER}"
-                    def folderPath = "${WORKSPACE_PATH}/${params.PROJECT}/${params.KEYDB_FOLDER}"
+                    def redisInstances = env.REDIS_INSTANCES.split(',')
+                    def keysToDelete = env.KEYS_TO_DELETE.split(',')
 
-                    // Find JSON files
-                    def jsonFiles = sh(script: "ls ${folderPath}/*.json 2>/dev/null || echo 'NO_FILES'", returnStdout: true).trim().split("\n")
+                    redisInstances.each { redisInstance ->
+                        def (host, port) = redisInstance.split(":")
+                        echo "🔎 Connecting to Redis: ${host}:${port}"
 
-                    if (jsonFiles[0] == "NO_FILES") {
-                        error "❌ No JSON files found in ${folderPath}. Please check the repository structure."
-                    }
-
-                    echo "✅ Found JSON files: ${jsonFiles.join(', ')}"
-
-                    // Process each JSON file and delete keys
-                    for (jsonFile in jsonFiles) {
-                        echo "📜 Processing JSON file: ${jsonFile}"
-
-                        def redisInstances = sh(script: "cat ${jsonFile}", returnStdout: true).trim().split("\n")
-
-                        for (redis in redisInstances) {
-                            def (host, port) = redis.split(":")
-                            echo "🔎 Connecting to Redis: ${host}:${port}"
-
+                        keysToDelete.each { key ->
+                            echo "🔑 Deleting key: ${key} from Redis instance: ${host}:${port}"
                             def redisCliPath = "redis-cli"
                             def testConnection = sh(script: "${redisCliPath} -h ${host} -p ${port} PING || echo 'AUTH_REQUIRED'", returnStdout: true).trim()
 
                             if (testConnection == "PONG") {
                                 echo "✅ No authentication needed for Redis: ${host}"
                                 sh """
-                                ${redisCliPath} -h ${host} -p ${port} --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 ${redisCliPath} -h ${host} -p ${port} DEL
+                                ${redisCliPath} -h ${host} -p ${port} --scan --pattern '${key}' | xargs -r -n 1 ${redisCliPath} -h ${host} -p ${port} DEL
                                 """
                             } else {
                                 echo "🔒 Authentication required for Redis: ${host}"
@@ -117,7 +110,7 @@ pipeline {
                                         echo "✅ Authentication successful with redis-pass-1"
                                         authSuccess = true
                                         sh """
-                                        ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword1}' --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword1}' DEL
+                                        ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword1}' --scan --pattern '${key}' | xargs -r -n 1 ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword1}' DEL
                                         """
                                     }
                                 }
@@ -128,7 +121,7 @@ pipeline {
                                         echo "✅ Authentication successful with redis-pass-2"
                                         authSuccess = true
                                         sh """
-                                        ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' DEL
+                                        ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' --scan --pattern '${key}' | xargs -r -n 1 ${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' DEL
                                         """
                                     }
                                 }
@@ -138,7 +131,7 @@ pipeline {
                                 }
                             }
 
-                            echo "✅ Processed Redis: ${host}:${port} from ${jsonFile}"
+                            echo "✅ Deleted key: ${key} from Redis: ${host}:${port}"
                         }
                     }
                 }
