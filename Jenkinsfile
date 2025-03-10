@@ -35,15 +35,24 @@ pipeline {
                     // Log detected folders
                     echo "Detected folders: ${keydbFolders}"
 
-                    if (keydbFolders.isEmpty()) {
+                    // Check if keydbFolders is empty using .size()
+                    if (keydbFolders.size() == 0) {
                         error "❌ No KeyDB folders found in ${projectPath}."
                     }
 
                     echo "✅ Detected KeyDB Folders: ${keydbFolders.join(', ')}"
 
                     // Dynamically update the KEYDB_FOLDER parameter
+                    // Setting parameter dynamically using choice
+                    def choiceArray = []
+                    keydbFolders.each { folder ->
+                        def folderName = folder.tokenize("/").last()
+                        choiceArray << folderName
+                    }
+
+                    // Update KEYDB_FOLDER dynamically
                     currentBuild.rawBuild.addAction(new ParametersAction(
-                        new ChoiceParameterDefinition('KEYDB_FOLDER', keydbFolders, 'Select the KeyDB folder')
+                        new ChoiceParameterDefinition('KEYDB_FOLDER', choiceArray, 'Select the KeyDB folder')
                     ))
                 }
             }
