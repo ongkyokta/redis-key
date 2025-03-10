@@ -27,7 +27,7 @@ pipeline {
         // Static PROJECT choices
         choice(name: 'PROJECT', choices: ['platform', 'payment', 'coin'], description: 'Select the project folder')
 
-        // Default KEYDB_FOLDER choice that will be updated dynamically
+        // Initial KEYDB_FOLDER choices, dynamically set before pipeline execution
         choice(name: 'KEYDB_FOLDER', choices: ['Select a project first'], description: 'Select the KeyDB folder')
 
         string(name: 'KEY_NAME', description: 'Enter the Redis key pattern to delete')
@@ -42,16 +42,42 @@ pipeline {
             steps {
                 container('git-cli') {
                     script {
-                        // Ensure the workspace is clean by deleting any existing directory
-                        deleteDir()
                         echo "🔄 Cloning repository: ${REPO_URL}"
-                        
-                        // Clone the repository
                         sh "git clone ${REPO_URL} ."
 
-                        echo "📂 Listing cloned files:"
-                        sh "ls -la stg/${params.PROJECT}/"
+                        // Get available PROJECT folders
+                        def keydbFoldersRaw = sh(script: "ls -d stg/${params.PROJECT}/*/ 2>/dev/null || echo 'NO_FOLDERS'", returnStdout: true).trim()
+
+                        def keydbFolders = []
+
+                        if (keydbFoldersRaw != "NO_FOLDERS") {
+                            // Extract folder names
+                            keydbFolders = keydbFoldersRaw.split("\n").collect { it.tokenize("/")[-1] }
+                        } else {
+                            keydbFolders = ["No KeyDB folders found"]
+                        }
+
+                        echo "✅ Found KeyDB Folders: ${keydbFolders}"
+
+                        // Set the available KEYDB_FOLDER choices before the pipeline starts
+                        // Manually pass the available folders as parameters
+                        currentBuild.rawBuild.addAction(new ParametersAction(
+                            new ChoiceParameterDefinition('KEYDB_FOLDER', keydbFolders, 'Select the KeyDB folder')
+                        ))
                     }
+                }
+            }
+        }
+
+        stage('Clone Repository') {
+            steps {
+                container('git-cli') {
+                    deleteDir()
+                    echo "🔄 Cloning repository: ${REPO_URL}"
+                    sh "git clone ${REPO_URL} ."
+
+                    echo "📂 Listing cloned files:"
+                    sh "ls -la ${params.ENVIRONMENT}/${params.PROJECT}/"
                 }
             }
         }
