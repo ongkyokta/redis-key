@@ -108,7 +108,7 @@ pipeline {
 
                                 // Ensure correct formatting of the Redis command
                                 def checkKeyExists = sh(
-                                    script: "redis-cli -h ${host} -p ${port} --scan --pattern ${key} | wc -l",
+                                    script: "redis-cli -h ${host} -p ${port} --scan --pattern '${key}' | wc -l",
                                     returnStdout: true
                                 ).trim()
 
