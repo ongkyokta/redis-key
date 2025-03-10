@@ -100,22 +100,15 @@ pipeline {
                         def keysToDelete = env.KEYS_TO_DELETE.split(',')
 
                         redisInstances.each { redisInstance ->
-                            def parts = redisInstance.split(":")
-                            def host = parts[0].trim()
-                            def port = parts.length > 1 ? parts[1].trim() : "6390"  // Default to 6379 if missing
-
+                            def (host, port) = redisInstance.split(":")
                             echo "🔎 Connecting to Redis: ${host}:${port}"
 
                             keysToDelete.each { key ->
-                                key = key.replaceAll('"', '').trim()  // ✅ Remove unnecessary quotes
-
                                 echo "🔍 Checking if key exists: ${key} on Redis: ${host}:${port}"
 
-                                // ✅ Fixed Redis CLI command formatting
+                                // Ensure the correct format for the command
                                 def checkKeyExists = sh(
-                                    script: """
-                                    redis-cli -h ${host} -p ${port} --scan --pattern '${key}' | wc -l
-                                    """,
+                                    script: "redis-cli -h ${host} -p ${port} --scan --pattern '${key}' | wc -l",
                                     returnStdout: true
                                 ).trim()
 
@@ -190,6 +183,15 @@ pipeline {
                     }
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ Redis key deletion completed successfully for all JSON files!'
+        }
+        failure {
+            echo '❌ Redis key deletion failed. Please check logs.'
         }
     }
 }
