@@ -106,9 +106,9 @@ pipeline {
                             keysToDelete.each { key ->
                                 echo "🔍 Checking if key exists: ${key} on Redis: ${host}:${port}"
 
-                                // Ensure the correct format for the command
+                                // Ensure correct formatting of the Redis command
                                 def checkKeyExists = sh(
-                                    script: "redis-cli -h ${host} -p ${port} --scan --pattern '${key}' | wc -l",
+                                    script: "redis-cli -h ${host} -p ${port} --scan --pattern ${key} | wc -l",
                                     returnStdout: true
                                 ).trim()
 
