@@ -11,7 +11,7 @@ pipeline {
                 command: [ "cat" ]
                 tty: true
               - name: redis-cli
-                image: redis:7.0.5-alpine
+                image: redis:latest
                 command: [ "sleep" ]
                 args: [ "infinity" ]
                 tty: true
