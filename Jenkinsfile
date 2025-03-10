@@ -1,24 +1,5 @@
 pipeline {
-    agent {
-        kubernetes {
-            yaml """
-            apiVersion: v1
-            kind: Pod
-            spec:
-              containers:
-              - name: git-cli
-                image: alpine/git
-                command:
-                - cat
-                tty: true
-              - name: redis-cli
-                image: redis:latest
-                command:
-                - cat
-                tty: true
-            """
-        }
-    }
+    agent any
 
     parameters {
         choice(name: 'PROJECT', choices: ['platform', 'payment', 'coin'], description: 'Select the project folder')
@@ -26,35 +7,44 @@ pipeline {
         string(name: 'KEYDB_FOLDER', defaultValue: '', description: 'Auto-detected KeyDB folder based on selected Project')
     }
 
+    environment {
+        REPO_URL = 'https://github.com/ongkyokta/redis-key.git'
+        WORKSPACE_PATH = "${env.WORKSPACE}/stg"
+    }
+
     stages {
-        stage('Clone Repository') {
+        stage('Prepare Workspace') {
             steps {
-                container('git-cli') {
-                    echo "🔄 Cloning repository: https://github.com/ongkyokta/redis-key.git"
+                script {
+                    echo "🔄 Cloning repository: ${REPO_URL}"
                     deleteDir()
-                    sh "git clone https://github.com/ongkyokta/redis-key.git ."
+                    sh "git clone ${REPO_URL} ."
                 }
             }
         }
 
         stage('Detect KeyDB Folders') {
             steps {
-                container('git-cli') {
-                    script {
-                        def projectPath = "stg/${params.PROJECT}/"
-                        def keydbFolders = sh(script: "ls -d ${projectPath}*/", returnStdout: true).trim().split("\n")
-                        
-                        if (keydbFolders.isEmpty()) {
-                            error "❌ No KeyDB folders found in ${projectPath}."
-                        }
+                script {
+                    def projectPath = "${WORKSPACE_PATH}/${params.PROJECT}/"
+                    echo "🔍 Checking for directories in: ${projectPath}"
 
-                        echo "✅ Detected KeyDB Folders: ${keydbFolders.join(', ')}"
-                        
-                        // Dynamically update the KEYDB_FOLDER parameter
-                        currentBuild.rawBuild.addAction(new ParametersAction(
-                            new ChoiceParameterDefinition('KEYDB_FOLDER', keydbFolders, 'Select the KeyDB folder')
-                        ))
+                    // Get all subdirectories (keydb-* folders)
+                    def keydbFolders = sh(script: "ls -d ${projectPath}*/", returnStdout: true).trim().split("\n")
+
+                    // Log detected folders
+                    echo "Detected folders: ${keydbFolders}"
+
+                    if (keydbFolders.isEmpty()) {
+                        error "❌ No KeyDB folders found in ${projectPath}."
                     }
+
+                    echo "✅ Detected KeyDB Folders: ${keydbFolders.join(', ')}"
+
+                    // Dynamically update the KEYDB_FOLDER parameter
+                    currentBuild.rawBuild.addAction(new ParametersAction(
+                        new ChoiceParameterDefinition('KEYDB_FOLDER', keydbFolders, 'Select the KeyDB folder')
+                    ))
                 }
             }
         }
@@ -63,7 +53,7 @@ pipeline {
             steps {
                 script {
                     echo "Selected KeyDB folder: ${params.KEYDB_FOLDER}"
-                    def folderPath = "stg/${params.PROJECT}/${params.KEYDB_FOLDER}"
+                    def folderPath = "${WORKSPACE_PATH}/${params.PROJECT}/${params.KEYDB_FOLDER}"
 
                     // Find JSON files
                     def jsonFiles = sh(script: "ls ${folderPath}/*.json 2>/dev/null || echo 'NO_FILES'", returnStdout: true).trim().split("\n")
