@@ -23,8 +23,13 @@ pipeline {
     parameters {
         string(name: 'JIRA_URL', description: 'Enter the JIRA URL')
         choice(name: 'ENVIRONMENT', choices: ['stg', 'prd'], description: 'Select the environment')
+
+        // Static PROJECT choices
         choice(name: 'PROJECT', choices: ['platform', 'payment', 'coin'], description: 'Select the project folder')
-        choice(name: 'KEYDB_FOLDER', choices: ['keydb-payment', 'keydb-shared-payment'], description: 'Select the KeyDB folder')
+
+        // Default KEYDB_FOLDER choice that will be updated dynamically
+        choice(name: 'KEYDB_FOLDER', choices: ['Select a project first'], description: 'Select the KeyDB folder')
+
         string(name: 'KEY_NAME', description: 'Enter the Redis key pattern to delete')
     }
 
@@ -33,26 +38,46 @@ pipeline {
     }
 
     stages {
-        stage('Clone Repository') {
+        // This stage will set the correct KEYDB_FOLDER options before the job runs.
+        stage('Set KeyDB Folder Choices') {
             steps {
                 container('git-cli') {
-                    deleteDir()
-                    echo "🔄 Cloning repository: ${REPO_URL}"
-                    sh "git clone ${REPO_URL} ."
+                    script {
+                        echo "🔄 Cloning repository: ${REPO_URL}"
+                        sh "git clone ${REPO_URL} ."
 
-                    echo "📂 Listing cloned files:"
-                    sh "ls -la ${params.ENVIRONMENT}/${params.PROJECT}/${params.KEYDB_FOLDER}"
+                        // Get available PROJECT folders
+                        def keydbFoldersRaw = sh(script: "ls -d stg/${params.PROJECT}/*/ 2>/dev/null || echo 'NO_FOLDERS'", returnStdout: true).trim()
+
+                        def keydbFolders = []
+
+                        if (keydbFoldersRaw != "NO_FOLDERS") {
+                            keydbFolders = keydbFoldersRaw.split("\n")*.tokenize("/")[-1] // Extract last folder name
+                        } else {
+                            keydbFolders = ["No KeyDB folders found"]
+                        }
+
+                        echo "✅ Found KeyDB Folders: ${keydbFolders}"
+
+                        // Dynamically set the choices for KEYDB_FOLDER before the job execution
+                        properties([
+                            parameters([
+                                choice(name: 'KEYDB_FOLDER', choices: keydbFolders, description: 'Select the KeyDB folder')
+                            ])
+                        ])
+                    }
                 }
             }
         }
 
+        // This stage processes Redis configuration files based on the selected KeyDB folder
         stage('Locate & Process Redis Config Files') {
             steps {
                 script {
                     def folderPath = "${params.ENVIRONMENT}/${params.PROJECT}/${params.KEYDB_FOLDER}"
-                    
+
                     // 🔥 Find all JSON files inside KEYDB_FOLDER
-                    def jsonFiles = sh(script: "ls ${folderPath}/*.json || echo 'NO_FILES'", returnStdout: true).trim().split('\n')
+                    def jsonFiles = sh(script: "ls ${folderPath}/*.json 2>/dev/null || echo 'NO_FILES'", returnStdout: true).trim().split("\n")
 
                     if (jsonFiles[0] == "NO_FILES") {
                         error "❌ No JSON files found in ${folderPath}. Please check the repository structure."
@@ -63,7 +88,7 @@ pipeline {
                     for (jsonFile in jsonFiles) {
                         echo "📜 Processing JSON file: ${jsonFile}"
 
-                        def redisInstances = sh(script: "cat ${jsonFile}", returnStdout: true).trim().split('\n')
+                        def redisInstances = sh(script: "cat ${jsonFile}", returnStdout: true).trim().split("\n")
 
                         for (redis in redisInstances) {
                             def (host, port) = redis.split(":")
