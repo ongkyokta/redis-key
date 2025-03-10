@@ -38,7 +38,6 @@ pipeline {
     }
 
     stages {
-        // This stage will set the correct KEYDB_FOLDER options before the job runs.
         stage('Set KeyDB Folder Choices') {
             steps {
                 container('git-cli') {
@@ -52,7 +51,8 @@ pipeline {
                         def keydbFolders = []
 
                         if (keydbFoldersRaw != "NO_FOLDERS") {
-                            keydbFolders = keydbFoldersRaw.split("\n")*.tokenize("/")[-1] // Extract last folder name
+                            // Instead of using spread operator, use collect to extract the folder names
+                            keydbFolders = keydbFoldersRaw.split("\n").collect { it.tokenize("/")[-1] }
                         } else {
                             keydbFolders = ["No KeyDB folders found"]
                         }
@@ -70,7 +70,19 @@ pipeline {
             }
         }
 
-        // This stage processes Redis configuration files based on the selected KeyDB folder
+        stage('Clone Repository') {
+            steps {
+                container('git-cli') {
+                    deleteDir()
+                    echo "🔄 Cloning repository: ${REPO_URL}"
+                    sh "git clone ${REPO_URL} ."
+
+                    echo "📂 Listing cloned files:"
+                    sh "ls -la ${params.ENVIRONMENT}/${params.PROJECT}/"
+                }
+            }
+        }
+
         stage('Locate & Process Redis Config Files') {
             steps {
                 script {
