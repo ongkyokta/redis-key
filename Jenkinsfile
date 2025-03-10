@@ -24,16 +24,13 @@ pipeline {
         string(name: 'JIRA_URL', description: 'Enter the JIRA URL')
         choice(name: 'ENVIRONMENT', choices: ['stg', 'prd'], description: 'Select the environment')
         choice(name: 'PROJECT', choices: ['platform', 'payment', 'coin'], description: 'Select the project folder')
+        
         // Dynamically populate KEYDB_FOLDER based on the folder structure in the repo
-        dynamicChoiceParam('KEYDB_FOLDER', 
-            description: 'Select the KeyDB folder',
-            filterable: true,
-            choices: {
-                // Fetch the folder structure dynamically
-                def folders = sh(script: "git ls-tree --name-only HEAD stg/${params.PROJECT}/", returnStdout: true).trim().split('\n')
-                return folders
-            }
+        choice(name: 'KEYDB_FOLDER', 
+            choices: [],
+            description: 'Select the KeyDB folder'
         )
+
         string(name: 'KEY_NAME', description: 'Enter the Redis key pattern to delete')
     }
 
@@ -58,6 +55,18 @@ pipeline {
         stage('Locate & Process Redis Config Files') {
             steps {
                 script {
+                    // Dynamically list KEYDB Folders under stg/{PROJECT}
+                    def keydbFolders = sh(script: "ls -d ${params.ENVIRONMENT}/${params.PROJECT}/*/ | awk -F'/' '{print \$NF}'", returnStdout: true).trim().split("\n")
+
+                    echo "✅ Found KEYDB Folders: ${keydbFolders}"
+
+                    // Update the KEYDB_FOLDER choices dynamically
+                    properties([
+                        parameters([
+                            choice(name: 'KEYDB_FOLDER', choices: keydbFolders, description: 'Select the KeyDB folder')
+                        ])
+                    ])
+
                     def folderPath = "${params.ENVIRONMENT}/${params.PROJECT}/${params.KEYDB_FOLDER}"
                     
                     // 🔥 Find all JSON files inside KEYDB_FOLDER
