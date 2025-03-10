@@ -27,7 +27,7 @@ pipeline {
         // Static PROJECT choices
         choice(name: 'PROJECT', choices: ['platform', 'payment', 'coin'], description: 'Select the project folder')
 
-        // Initial KEYDB_FOLDER choices, dynamically set before pipeline execution
+        // Default KEYDB_FOLDER choice, which will be updated dynamically
         choice(name: 'KEYDB_FOLDER', choices: ['Select a project first'], description: 'Select the KeyDB folder')
 
         string(name: 'KEY_NAME', description: 'Enter the Redis key pattern to delete')
@@ -45,7 +45,7 @@ pipeline {
                         echo "🔄 Cloning repository: ${REPO_URL}"
                         sh "git clone ${REPO_URL} ."
 
-                        // Get available PROJECT folders
+                        // Fetch the available PROJECT folders
                         def keydbFoldersRaw = sh(script: "ls -d stg/${params.PROJECT}/*/ 2>/dev/null || echo 'NO_FOLDERS'", returnStdout: true).trim()
 
                         def keydbFolders = []
@@ -59,8 +59,7 @@ pipeline {
 
                         echo "✅ Found KeyDB Folders: ${keydbFolders}"
 
-                        // Set the available KEYDB_FOLDER choices before the pipeline starts
-                        // Manually pass the available folders as parameters
+                        // Dynamically set the choices for KEYDB_FOLDER before the pipeline starts
                         currentBuild.rawBuild.addAction(new ParametersAction(
                             new ChoiceParameterDefinition('KEYDB_FOLDER', keydbFolders, 'Select the KeyDB folder')
                         ))
