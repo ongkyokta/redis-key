@@ -71,8 +71,10 @@ pipeline {
                             error "❌ Invalid or missing 'redis_instances' in config.json"
                         }
                         
-                        // Ensure all IPs have the default Redis port (6390)
-                        def redisInstances = redisConfig.redis_instances.collect { it.trim() + ":" + env.DEFAULT_REDIS_PORT }
+                        // Ensure all Redis IPs include port 6390
+                        def redisInstances = redisConfig.redis_instances.collect { 
+                            it.contains(":") ? it.trim() : it.trim() + ":" + env.DEFAULT_REDIS_PORT 
+                        }
                         echo "Detected Redis instances: ${redisInstances.join(', ')}"
 
                         def ticketFile = "${projectPath}/${env.JIRA_KEY}.json"
@@ -110,19 +112,21 @@ pipeline {
                             keysToDelete.each { key ->
                                 echo "🔍 Checking if key exists: ${key} on Redis: ${host}:${port}"
 
-                                // Log the exact command being run
-                                def redisCommand = "redis-cli -h ${host} -p ${port} --scan --pattern '${key}' | wc -l"
+                                // Get the list of actual keys matching the pattern
+                                def redisCommand = "redis-cli -h ${host} -p ${port} --scan --pattern '${key}'"
                                 echo "✅ Running Redis check command: ${redisCommand}"
 
-                                // Run command to check key existence
-                                def checkKeyExists = sh(script: redisCommand, returnStdout: true).trim()
+                                def keyList = sh(script: redisCommand, returnStdout: true).trim()
 
-                                if (checkKeyExists == "0") {
-                                    echo "❌ Key not found: ${key} in Redis ${host}:${port}"
+                                if (!keyList) {
+                                    echo "❌ No matching keys found: ${key} in Redis ${host}:${port}"
                                     return
                                 }
 
-                                echo "🔑 Deleting key: ${key} from Redis instance: ${host}:${port}"
+                                echo "✅ Found keys in Redis ${host}:${port}:"
+                                echo keyList
+
+                                echo "🔑 Deleting keys matching: ${key} from Redis instance: ${host}:${port}"
 
                                 def testConnection = sh(
                                     script: "redis-cli -h ${host} -p ${port} PING || echo 'AUTH_REQUIRED'",
@@ -132,7 +136,7 @@ pipeline {
                                 if (testConnection == "PONG") {
                                     echo "✅ No authentication needed for Redis: ${host}"
                                     sh """
-                                    redis-cli -h ${host} -p ${port} --scan --pattern '${key}' | xargs -r -n 1 redis-cli -h ${host} -p ${port} DEL
+                                    echo '${keyList}' | xargs -r -n 1 redis-cli -h ${host} -p ${port} DEL
                                     """
                                 } else {
                                     echo "🔒 Authentication required for Redis: ${host}"
@@ -158,7 +162,7 @@ pipeline {
                                             echo "✅ Authentication successful with redis-pass-1"
                                             authSuccess = true
                                             sh """
-                                            redis-cli -h ${host} -p ${port} -a '${redisPassword1}' --scan --pattern '${key}' | xargs -r -n 1 redis-cli -h ${host} -p ${port} -a '${redisPassword1}' DEL
+                                            echo '${keyList}' | xargs -r -n 1 redis-cli -h ${host} -p ${port} -a '${redisPassword1}' DEL
                                             """
                                         }
                                     }
@@ -172,7 +176,7 @@ pipeline {
                                             echo "✅ Authentication successful with redis-pass-2"
                                             authSuccess = true
                                             sh """
-                                            redis-cli -h ${host} -p ${port} -a '${redisPassword2}' --scan --pattern '${key}' | xargs -r -n 1 redis-cli -h ${host} -p ${port} -a '${redisPassword2}' DEL
+                                            echo '${keyList}' | xargs -r -n 1 redis-cli -h ${host} -p ${port} -a '${redisPassword2}' DEL
                                             """
                                         }
                                     }
@@ -182,7 +186,7 @@ pipeline {
                                     }
                                 }
 
-                                echo "✅ Deleted key: ${key} from Redis: ${host}:${port}"
+                                echo "✅ Deleted keys matching: ${key} from Redis: ${host}:${port}"
                             }
                         }
                     }
