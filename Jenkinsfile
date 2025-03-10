@@ -53,46 +53,79 @@ pipeline {
             }
         }
 
+        stage('Detect Redis Folders') {
+            steps {
+                container('git-cli') {
+                    script {
+                        def projectPath = "${WORKSPACE_PATH}/${params.PROJECT}"
+
+                        // Find all directories inside the selected project
+                        def availableFolders = sh(
+                            script: "find ${projectPath} -maxdepth 1 -type d | tail -n +2",
+                            returnStdout: true
+                        ).trim().split("\n")
+
+                        if (availableFolders.isEmpty()) {
+                            error "❌ No Redis folders found in ${projectPath}"
+                        }
+
+                        echo "✅ Detected Redis folders: ${availableFolders.join(', ')}"
+
+                        // Store in an environment variable for later use
+                        env.REDIS_FOLDERS = availableFolders.join(',')
+                    }
+                }
+            }
+        }
+
         stage('Locate Redis Config and Ticket Files') {
             steps {
                 container('git-cli') {
                     script {
-                        def projectPath = "${WORKSPACE_PATH}/${params.PROJECT}/keydb-shared-payment"
-                        echo "🔍 Checking for files in: ${projectPath}"
+                        def redisFolders = env.REDIS_FOLDERS.split(',')
 
-                        def configFile = "${projectPath}/config.json"
-                        if (!fileExists(configFile)) {
-                            error "❌ config.json file not found in ${projectPath}."
+                        redisFolders.each { redisFolder ->
+                            def projectPath = "${redisFolder}"
+                            echo "🔍 Checking for files in: ${projectPath}"
+
+                            def configFile = "${projectPath}/config.json"
+                            if (!fileExists(configFile)) {
+                                echo "⚠️ Skipping ${projectPath}, config.json not found"
+                                return
+                            }
+                            echo "✅ Found config.json in ${projectPath}"
+
+                            def redisConfig = readJSON(file: configFile)
+                            if (!redisConfig.containsKey("redis_instances") || redisConfig.redis_instances.isEmpty()) {
+                                echo "⚠️ No valid Redis instances in ${configFile}. Skipping..."
+                                return
+                            }
+
+                            // Ensure all Redis IPs include port 6390
+                            def redisInstances = redisConfig.redis_instances.collect { 
+                                it.contains(":") ? it.trim() : it.trim() + ":" + env.DEFAULT_REDIS_PORT 
+                            }
+                            echo "Detected Redis instances in ${projectPath}: ${redisInstances.join(', ')}"
+
+                            def ticketFile = "${projectPath}/${env.JIRA_KEY}.json"
+                            if (!fileExists(ticketFile)) {
+                                echo "⚠️ Ticket file ${env.JIRA_KEY}.json not found in ${projectPath}. Skipping..."
+                                return
+                            }
+                            echo "✅ Found ticket file: ${ticketFile}"
+
+                            def ticketData = readJSON(file: ticketFile)
+                            if (!ticketData.containsKey("keys") || ticketData.keys.isEmpty()) {
+                                echo "⚠️ No keys found in ${env.JIRA_KEY}.json. Skipping..."
+                                return
+                            }
+                            def keysToDelete = ticketData.keys.collect { it.trim() }
+
+                            echo "Keys to delete from ${projectPath}: ${keysToDelete.join(', ')}"
+
+                            env.REDIS_INSTANCES = (env.REDIS_INSTANCES ?: '') + ',' + redisInstances.join(',')
+                            env.KEYS_TO_DELETE = (env.KEYS_TO_DELETE ?: '') + ',' + keysToDelete.join(',')
                         }
-                        echo "✅ Found config.json"
-
-                        def redisConfig = readJSON(file: configFile)
-                        if (!redisConfig.containsKey("redis_instances") || redisConfig.redis_instances.isEmpty()) {
-                            error "❌ Invalid or missing 'redis_instances' in config.json"
-                        }
-                        
-                        // Ensure all Redis IPs include port 6390
-                        def redisInstances = redisConfig.redis_instances.collect { 
-                            it.contains(":") ? it.trim() : it.trim() + ":" + env.DEFAULT_REDIS_PORT 
-                        }
-                        echo "Detected Redis instances: ${redisInstances.join(', ')}"
-
-                        def ticketFile = "${projectPath}/${env.JIRA_KEY}.json"
-                        if (!fileExists(ticketFile)) {
-                            error "❌ Ticket file ${env.JIRA_KEY}.json not found."
-                        }
-                        echo "✅ Found ticket file: ${ticketFile}"
-
-                        def ticketData = readJSON(file: ticketFile)
-                        if (!ticketData.containsKey("keys") || ticketData.keys.isEmpty()) {
-                            error "❌ Invalid or missing 'keys' in ${env.JIRA_KEY}.json"
-                        }
-                        def keysToDelete = ticketData.keys.collect { it.trim() } // Trim keys to prevent issues
-
-                        echo "Keys to delete: ${keysToDelete.join(', ')}"
-
-                        env.REDIS_INSTANCES = redisInstances.join(',')
-                        env.KEYS_TO_DELETE = keysToDelete.join(',')
                     }
                 }
             }
@@ -136,9 +169,7 @@ pipeline {
                                 if (testConnection == "PONG") {
                                     echo "✅ No authentication needed for Redis: ${host}"
                                     sh """
-                                    printf '%s\n' '${keyList}' | while read -r key; do
-                                        redis-cli -h ${host} -p ${port} DEL "\$key"
-                                    done
+                                    echo '${keyList}' | xargs -r -n 1 redis-cli -h ${host} -p ${port} DEL
                                     """
                                 } else {
                                     echo "🔒 Authentication required for Redis: ${host}"
