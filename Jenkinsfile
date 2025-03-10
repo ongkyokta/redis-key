@@ -42,43 +42,16 @@ pipeline {
             steps {
                 container('git-cli') {
                     script {
+                        // Ensure the workspace is clean by deleting any existing directory
+                        deleteDir()
                         echo "🔄 Cloning repository: ${REPO_URL}"
+                        
+                        // Clone the repository
                         sh "git clone ${REPO_URL} ."
 
-                        // Get available PROJECT folders
-                        def keydbFoldersRaw = sh(script: "ls -d stg/${params.PROJECT}/*/ 2>/dev/null || echo 'NO_FOLDERS'", returnStdout: true).trim()
-
-                        def keydbFolders = []
-
-                        if (keydbFoldersRaw != "NO_FOLDERS") {
-                            // Instead of using spread operator, use collect to extract the folder names
-                            keydbFolders = keydbFoldersRaw.split("\n").collect { it.tokenize("/")[-1] }
-                        } else {
-                            keydbFolders = ["No KeyDB folders found"]
-                        }
-
-                        echo "✅ Found KeyDB Folders: ${keydbFolders}"
-
-                        // Dynamically set the choices for KEYDB_FOLDER before the job execution
-                        properties([
-                            parameters([
-                                choice(name: 'KEYDB_FOLDER', choices: keydbFolders, description: 'Select the KeyDB folder')
-                            ])
-                        ])
+                        echo "📂 Listing cloned files:"
+                        sh "ls -la stg/${params.PROJECT}/"
                     }
-                }
-            }
-        }
-
-        stage('Clone Repository') {
-            steps {
-                container('git-cli') {
-                    deleteDir()
-                    echo "🔄 Cloning repository: ${REPO_URL}"
-                    sh "git clone ${REPO_URL} ."
-
-                    echo "📂 Listing cloned files:"
-                    sh "ls -la ${params.ENVIRONMENT}/${params.PROJECT}/"
                 }
             }
         }
