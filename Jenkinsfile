@@ -24,7 +24,16 @@ pipeline {
         string(name: 'JIRA_URL', description: 'Enter the JIRA URL')
         choice(name: 'ENVIRONMENT', choices: ['stg', 'prd'], description: 'Select the environment')
         choice(name: 'PROJECT', choices: ['platform', 'payment', 'coin'], description: 'Select the project folder')
-        choice(name: 'KEYDB_FOLDER', choices: ['keydb-payment', 'keydb-shared-payment'], description: 'Select the KeyDB folder')
+        // Dynamically populate KEYDB_FOLDER based on the folder structure in the repo
+        dynamicChoiceParam('KEYDB_FOLDER', 
+            description: 'Select the KeyDB folder',
+            filterable: true,
+            choices: {
+                // Fetch the folder structure dynamically
+                def folders = sh(script: "git ls-tree --name-only HEAD stg/${params.PROJECT}/", returnStdout: true).trim().split('\n')
+                return folders
+            }
+        )
         string(name: 'KEY_NAME', description: 'Enter the Redis key pattern to delete')
     }
 
@@ -41,7 +50,7 @@ pipeline {
                     sh "git clone ${REPO_URL} ."
 
                     echo "📂 Listing cloned files:"
-                    sh "ls -la ${params.ENVIRONMENT}/${params.PROJECT}/${params.KEYDB_FOLDER}"
+                    sh "ls -la ${params.ENVIRONMENT}/${params.PROJECT}"
                 }
             }
         }
