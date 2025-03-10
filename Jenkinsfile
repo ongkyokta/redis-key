@@ -25,7 +25,6 @@ pipeline {
         stage('Extract JIRA Key') {
             steps {
                 script {
-                    // Extract the JIRA key from the URL (e.g., DEVOPS-1111)
                     def jiraKey = params.JIRA_URL.tokenize('/').last()
                     env.JIRA_KEY = jiraKey
                     echo "Extracted JIRA Key: ${jiraKey}"
@@ -39,30 +38,37 @@ pipeline {
                     def projectPath = "${WORKSPACE_PATH}/${params.PROJECT}/keydb-shared-payment"
                     echo "🔍 Checking for files in: ${projectPath}"
 
-                    // Locate config.json
+                    // Locate config.json (for Redis instances)
                     def configFile = "${projectPath}/config.json"
                     if (!fileExists(configFile)) {
                         error "❌ config.json file not found in ${projectPath}."
                     }
                     echo "✅ Found config.json"
 
-                    // Load Redis instances from config.json
-                    def redisInstances = readJSON(file: configFile).redis_instances
+                    // Read and validate Redis instances from config.json
+                    def redisConfig = readJSON(file: configFile)
+                    if (!redisConfig.containsKey("redis_instances") || redisConfig.redis_instances.isEmpty()) {
+                        error "❌ Invalid or missing 'redis_instances' in config.json"
+                    }
+                    def redisInstances = redisConfig.redis_instances
                     echo "Detected Redis instances: ${redisInstances.join(', ')}"
 
-                    // Locate the JIRA ticket JSON file (e.g., DEVOPS-1111.json)
+                    // Locate JIRA ticket JSON file (e.g., DEVOPS-1111.json)
                     def ticketFile = "${projectPath}/${env.JIRA_KEY}.json"
                     if (!fileExists(ticketFile)) {
                         error "❌ Ticket file ${env.JIRA_KEY}.json not found."
                     }
                     echo "✅ Found ticket file: ${ticketFile}"
 
-                    // Read keys to delete from the JIRA ticket file
+                    // Read and validate keys from JIRA ticket file
                     def ticketData = readJSON(file: ticketFile)
+                    if (!ticketData.containsKey("keys") || ticketData.keys.isEmpty()) {
+                        error "❌ Invalid or missing 'keys' in ${env.JIRA_KEY}.json"
+                    }
                     def keysToDelete = ticketData.keys
                     echo "Keys to delete: ${keysToDelete.join(', ')}"
 
-                    // Store for use in the next stage
+                    // Store in environment variables for the next stage
                     env.REDIS_INSTANCES = redisInstances.join(',')
                     env.KEYS_TO_DELETE = keysToDelete.join(',')
                 }
@@ -82,7 +88,11 @@ pipeline {
                         keysToDelete.each { key ->
                             echo "🔑 Deleting key: ${key} from Redis instance: ${host}:${port}"
                             def redisCliPath = "redis-cli"
-                            def testConnection = sh(script: "${redisCliPath} -h ${host} -p ${port} PING || echo 'AUTH_REQUIRED'", returnStdout: true).trim()
+
+                            def testConnection = sh(
+                                script: "${redisCliPath} -h ${host} -p ${port} PING || echo 'AUTH_REQUIRED'",
+                                returnStdout: true
+                            ).trim()
 
                             if (testConnection == "PONG") {
                                 echo "✅ No authentication needed for Redis: ${host}"
@@ -105,7 +115,10 @@ pipeline {
                                 }
 
                                 if (redisPassword1?.trim()) {
-                                    def testAuth1 = sh(script: "${redisCliPath} -h ${host} -p ${port} -a '${redisPassword1}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
+                                    def testAuth1 = sh(
+                                        script: "${redisCliPath} -h ${host} -p ${port} -a '${redisPassword1}' PING || echo 'AUTH_FAILED'",
+                                        returnStdout: true
+                                    ).trim()
                                     if (testAuth1 == "PONG") {
                                         echo "✅ Authentication successful with redis-pass-1"
                                         authSuccess = true
@@ -116,7 +129,10 @@ pipeline {
                                 }
 
                                 if (!authSuccess && redisPassword2?.trim()) {
-                                    def testAuth2 = sh(script: "${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' PING || echo 'AUTH_FAILED'", returnStdout: true).trim()
+                                    def testAuth2 = sh(
+                                        script: "${redisCliPath} -h ${host} -p ${port} -a '${redisPassword2}' PING || echo 'AUTH_FAILED'",
+                                        returnStdout: true
+                                    ).trim()
                                     if (testAuth2 == "PONG") {
                                         echo "✅ Authentication successful with redis-pass-2"
                                         authSuccess = true
