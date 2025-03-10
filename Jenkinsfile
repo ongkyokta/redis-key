@@ -20,55 +20,83 @@ pipeline {
         }
     }
 
+    parameters {
+        string(name: 'JIRA_URL', description: 'Enter the JIRA URL')
+        choice(name: 'ENVIRONMENT', choices: ['stg', 'prd'], description: 'Select the environment')
+        choice(name: 'PROJECT', choices: ['platform', 'payment', 'coin'], description: 'Select the project folder')
+        choice(name: 'KEYDB_FOLDER', choices: ['keydb-payment', 'keydb-shared-payment'], description: 'Select the KeyDB folder')
+        string(name: 'KEY_NAME', description: 'Enter the Redis key pattern to delete')
+    }
+
     environment {
         REPO_URL = 'https://github.com/ongkyokta/redis-key.git'
     }
 
     stages {
-        stage('Initialize Parameters') {
-            steps {
-                script {
-                    // 🔄 Clone Repository to Read Folder Structure
-                    container('git-cli') {
-                        sh "find ${WORKSPACE} -mindepth 1 -delete || true"
-                        sh "git config --global --add safe.directory '${WORKSPACE}'"
-                        sh "git clone --no-checkout ${REPO_URL} ."
-                        sh "git reset --hard"
-                    }
-
-                    // ✅ Get List of Projects
-                    def projectList = sh(script: """
-                        ls -d stg/*/ 2>/dev/null | awk -F'/' '{print \$2}' | sort -u || echo "NO_PROJECTS"
-                    """, returnStdout: true).trim().split("\n").findAll { it != "NO_PROJECTS" }
-
-                    // ✅ Define Active Choices Parameters
-                    properties([
-                        parameters([
-                            string(name: 'JIRA_URL', description: 'Enter the JIRA URL'),
-                            choice(name: 'ENVIRONMENT', choices: ['stg', 'prd'], description: 'Select the environment'),
-
-                            [$class: 'ChoiceParameterDefinition', 
-                                name: 'PROJECT', 
-                                choices: projectList, 
-                                description: 'Select the project folder'],
-
-                            string(name: 'KEY_NAME', description: 'Enter the Redis key pattern to delete')
-                        ])
-                    ])
-                }
-            }
-        }
-
         stage('Clone Repository') {
             steps {
                 container('git-cli') {
                     deleteDir()
                     echo "🔄 Cloning repository: ${REPO_URL}"
-                    sh "git config --global --add safe.directory '${WORKSPACE}'"
                     sh "git clone ${REPO_URL} ."
 
                     echo "📂 Listing cloned files:"
-                    sh "ls -R ${params.ENVIRONMENT}/"
+                    sh "ls -la ${params.ENVIRONMENT}/${params.PROJECT}/${params.KEYDB_FOLDER}"
+                }
+            }
+        }
+
+        stage('Locate & Process Redis Config Files') {
+            steps {
+                script {
+                    def folderPath = "${params.ENVIRONMENT}/${params.PROJECT}/${params.KEYDB_FOLDER}"
+                    
+                    // 🔥 Find all JSON files inside KEYDB_FOLDER
+                    def jsonFiles = sh(script: "ls ${folderPath}/*.json || echo 'NO_FILES'", returnStdout: true).trim().split('\n')
+
+                    if (jsonFiles[0] == "NO_FILES") {
+                        error "❌ No JSON files found in ${folderPath}. Please check the repository structure."
+                    }
+
+                    echo "✅ Found JSON files: ${jsonFiles.join(', ')}"
+
+                    for (jsonFile in jsonFiles) {
+                        echo "📜 Processing JSON file: ${jsonFile}"
+
+                        def redisInstances = sh(script: "cat ${jsonFile}", returnStdout: true).trim().split('\n')
+
+                        for (redis in redisInstances) {
+                            def (host, port) = redis.split(":")
+                            echo "🔎 Connecting to Redis: ${host}:${port}"
+
+                            // 🔥 Determine if Redis requires authentication
+                            def credentialId = ""
+                            if (host == "10.199.2.31") { credentialId = "redis-pass-1" }
+                            else if (host == "10.199.2.32") { credentialId = "redis-pass-2" }
+
+                            if (credentialId) {
+                                echo "🔒 Using authentication for Redis: ${host}"
+                                withCredentials([string(credentialsId: credentialId, variable: 'REDIS_PASSWORD')]) {
+                                    def deleteCommand = """
+                                    redis-cli -h ${host} -p ${port} -a '${REDIS_PASSWORD}' --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 redis-cli -h ${host} -p ${port} -a '${REDIS_PASSWORD}' DEL
+                                    """
+                                    container('redis-cli') {
+                                        sh deleteCommand
+                                    }
+                                }
+                            } else {
+                                echo "🔓 No authentication needed for Redis: ${host}"
+                                def deleteCommand = """
+                                redis-cli -h ${host} -p ${port} --scan --pattern '${params.KEY_NAME}' | xargs -r -n 1 redis-cli -h ${host} -p ${port} DEL
+                                """
+                                container('redis-cli') {
+                                    sh deleteCommand
+                                }
+                            }
+
+                            echo "✅ Processed Redis: ${host}:${port} from ${jsonFile}"
+                        }
+                    }
                 }
             }
         }
@@ -76,10 +104,10 @@ pipeline {
 
     post {
         success {
-            echo '✅ Jenkins pipeline ran successfully!'
+            echo '✅ Redis key deletion completed successfully for all JSON files!'
         }
         failure {
-            echo '❌ Pipeline failed. Please check logs.'
+            echo '❌ Redis key deletion failed. Please check logs.'
         }
     }
 }
