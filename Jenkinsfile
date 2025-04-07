@@ -22,12 +22,13 @@ pipeline {
     parameters {
         string(name: 'JIRA_URL', description: 'Enter the JIRA URL')
         choice(name: 'PROJECT', choices: ['payment', 'coin', 'platform'], description: 'Select the project folder')
+    }
 
-        // Active Choices Reactive Reference Parameter
-        activeChoiceReactiveParam(name: 'REDIS_FOLDER', description: 'Select Redis Folder based on selected Project') {
-            filterable()
-            groovyScript {
-                script("""
+    // Active Choice Reactive Reference Parameter (correctly placed)
+    activeChoiceReactiveParam(name: 'REDIS_FOLDER', description: 'Select Redis Folder based on selected Project') {
+        filterable()
+        groovyScript {
+            script("""
 import groovy.json.JsonSlurper
 
 // Dynamically use the selected project from the PROJECT parameter
@@ -45,7 +46,7 @@ def jsonResponse = new JsonSlurper().parseText(process.text)
 
 // Initialize an array to hold the folder names (keydb folders)
 def folderList = []
-def html = '''<select name="value">'''
+def html = """<select name="value">"""
 
 // Loop through the response and collect the names of subdirectories (keydb folders)
 jsonResponse.each { item ->
@@ -58,8 +59,7 @@ jsonResponse.each { item ->
 html += '''</select>'''
 return html
 """)
-                fallbackScript('["error"]')
-            }
+            fallbackScript('["error"]')
         }
     }
 
