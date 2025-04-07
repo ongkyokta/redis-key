@@ -16,10 +16,7 @@ pipelineJob('ongky_test') {
                 script("""
 import groovy.json.JsonSlurper
 
-// Get the selected project from Jenkins parameters (e.g., payment, coin, platform)
-//def project = build.buildVariableResolver.resolve("PROJECT") // PROJECT is passed as a parameter
-
-// Construct the URL to fetch the contents of the selected project inside 'stg'
+// Dynamically use the selected project from the PROJECT parameter
 def githubRepoUrl = 'https://api.github.com/repos/ongkyokta/redis-key/contents/'
 def tribeName = "stg/"+PROJECT // Dynamically use the selected project
 
@@ -56,6 +53,34 @@ return html = html+'''
                 """)
             }
             referencedParameter('PROJECT')
+        }
+    }
+
+    // Define SCM configuration
+    scm {
+        git {
+            remote {
+                url('https://github.com/ongkyokta/redis-key.git')
+                credentials('devopswizard')  // Use credentials for Git access
+            }
+            branches('*/main')  // Specify the branch to use
+            scriptPath('jenkinsfile')  // Specify the script path for the Jenkins pipeline
+        }
+    }
+
+    // Add any additional configurations like triggers, log rotation, etc.
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/ongkyokta/redis-key.git')
+                        credentials('devopswizard')  // Use credentials for Git access
+                    }
+                    branches('*/main')  // Specify the branch to use
+                    scriptPath('jenkinsfile')  // Specify the script path for the Jenkins pipeline
+                }
+            }
         }
     }
 
