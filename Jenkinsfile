@@ -21,17 +21,16 @@ pipeline {
 
     parameters {
         string(name: 'JIRA_URL', description: 'Enter the JIRA URL')
-        choice(name: 'PROJECT', choices: ['payment'], description: 'Select the project folder')
+        choice(name: 'PROJECT', choices: ['payment', 'coin', 'platform'], description: 'Select the project folder')
 
-        // Active Choices parameter to select the Redis folder based on the selected project
-        activeChoiceReactiveParam('REDIS_FOLDER') {
-            description('Select Redis Folder')
+        // Active Choices Reactive Reference Parameter
+        activeChoiceReactiveParam(name: 'REDIS_FOLDER', description: 'Select Redis Folder based on selected Project') {
             filterable()
             groovyScript {
                 script('''
 import groovy.json.JsonSlurper
 
-// Construct the URL to fetch the contents of the selected project inside 'stg'
+// Dynamically use the selected project from the PROJECT parameter
 def githubRepoUrl = 'https://api.github.com/repos/ongkyokta/redis-key/contents/'
 def tribeName = "stg/${PROJECT}" // Dynamically use the selected project
 
@@ -46,15 +45,18 @@ def jsonResponse = new JsonSlurper().parseText(process.text)
 
 // Initialize an array to hold the folder names (keydb folders)
 def folderList = []
+def html = '''<select name="value">'''
 
 // Loop through the response and collect the names of subdirectories (keydb folders)
 jsonResponse.each { item ->
     if (item.type == 'dir') { // Only consider directories (keydb folders)
         folderList.add(item.name) // Add the directory name to the list
+        html += "<option value='${item.name}'>${item.name}</option>" + "\n"
     }
 }
 
-return folderList ?: ['No folders found']
+html += '''</select>'''
+return html
 ''')
                 fallbackScript('["error"]')
             }
@@ -94,7 +96,7 @@ return folderList ?: ['No folders found']
             steps {
                 container('git-cli') {
                     script {
-                        def redisFolder = params.REDIS_FOLDER
+                        def redisFolder = params.REDIS_FOLDER // Using the folder selected in the Active Choice
                         def projectPath = "${WORKSPACE_PATH}/${params.PROJECT}/${redisFolder}"  // Dynamically get the folder path
                         echo "🔍 Checking for files in: ${projectPath}"
 
