@@ -49,6 +49,7 @@ return html.toString()
 return ["<option value='error'>Failed to fetch folders</option>"]
 """)
             }
+            referencedParameter('PROJECT')
         }
     }
 
