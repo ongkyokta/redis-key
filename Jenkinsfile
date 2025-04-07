@@ -46,18 +46,16 @@ def jsonResponse = new JsonSlurper().parseText(process.text)
 
 // Initialize an array to hold the folder names (keydb folders)
 def folderList = []
-html = '''<select name="value">'''
 
 // Loop through the response and collect the names of subdirectories (keydb folders)
 jsonResponse.each { item ->
     if (item.type == 'dir') { // Only consider directories (keydb folders)
         folderList.add(item.name) // Add the directory name to the list
-        html = html + "<option value=" + item.name + ">" + item.name + "</option>" + "\n"
     }
 }
 
-return html + '''</select>'''
-                ''')
+return folderList ?: ['No folders found']
+''')
                 fallbackScript('["error"]')
             }
         }
@@ -97,7 +95,7 @@ return html + '''</select>'''
                 container('git-cli') {
                     script {
                         def redisFolder = params.REDIS_FOLDER
-                        def projectPath = "${WORKSPACE_PATH}/${params.PROJECT}/${redisFolder}"
+                        def projectPath = "${WORKSPACE_PATH}/${params.PROJECT}/${redisFolder}"  // Dynamically get the folder path
                         echo "🔍 Checking for files in: ${projectPath}"
 
                         def configFile = "${projectPath}/config.json"
