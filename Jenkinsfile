@@ -46,13 +46,13 @@ def jsonResponse = new JsonSlurper().parseText(process.text)
 
 // Initialize an array to hold the folder names (keydb folders)
 def folderList = []
-def html = """<select name="value">"""
+def html = '<select name="value">'
 
 // Loop through the response and collect the names of subdirectories (keydb folders)
 jsonResponse.each { item ->
     if (item.type == 'dir') { // Only consider directories (keydb folders)
         folderList.add(item.name) // Add the directory name to the list
-        html += "<option value='${item.name}'>${item.name}</option>" + "\n"
+        html += "<option value='${item.name}'>${item.name}</option>" + "\\n"
     }
 }
 
