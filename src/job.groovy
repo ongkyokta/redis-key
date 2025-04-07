@@ -1,3 +1,5 @@
+import groovy.json.JsonSlurper
+
 // Define parameters for the Jenkins job
 pipelineJob('ongky_test') {
     description('Jenkins Pipeline Job for ongky_test')
