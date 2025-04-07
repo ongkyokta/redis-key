@@ -16,6 +16,7 @@ pipelineJob('ongky_test') {
                 script("""
 import groovy.json.JsonSlurper
 
+
 // Get the selected project from Jenkins parameters (e.g., payment, coin, platform)
 //def project = build.buildVariableResolver.resolve("PROJECT") // PROJECT is passed as a parameter
 
@@ -47,9 +48,11 @@ jsonResponse.each { item ->
     }
 }
 
+
 return html = html+'''
 </select>
 '''
+
 """)
                 fallbackScript("""
                     return ["<option value='error'>Failed to fetch folders</option>"]
