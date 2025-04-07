@@ -59,5 +59,5 @@ return html = html+'''
         }
     }
 
-    // Add any additional configurations like triggers, log rotation, etc.
+    // Add any additional configurations like triggers, log rotation, etc..
 }
