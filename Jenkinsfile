@@ -64,7 +64,7 @@ return html
     }
 
     environment {
-        REPO_URL = 'https://github.com/ongkyokta/redis-key.git'
+        REPO_URL = "https://github.com/ongkyokta/redis-key.git"
         WORKSPACE_PATH = "${env.WORKSPACE}/stg"
         DEFAULT_REDIS_PORT = "6390"
     }
