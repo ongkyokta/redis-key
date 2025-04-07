@@ -1,3 +1,46 @@
+properties([
+    parameters([
+        string(name: 'JIRA_URL', description: 'Enter the JIRA URL'),
+        choice(name: 'PROJECT', choices: ['payment'], description: 'Select the project folder')
+    ])
+])
+
+activeChoiceReactiveParam(name: 'REDIS_FOLDER', description: 'Select Redis Folder based on selected Project') {
+    filterable()
+    choiceType('FORMATTED_HTML')
+    groovyScript {
+        script('''
+            import groovy.json.JsonSlurper
+
+            def githubRepoUrl = 'https://api.github.com/repos/ongkyokta/redis-key/contents/'
+            def tribeName = "stg/" + PROJECT // Dynamically use the selected project
+
+            def url = githubRepoUrl + tribeName
+
+            // Execute the curl command to fetch the directory contents from GitHub API
+            def command = ['curl', '-L', '-s', url]
+            def process = command.execute()
+
+            // Parse the response from the GitHub API
+            def jsonResponse = new JsonSlurper().parseText(process.text)
+
+            def html = '''
+            <select name="value">
+            '''
+
+            // Loop through the response and collect the names of subdirectories
+            jsonResponse.each { item ->
+                if (item.type == 'dir') {
+                    html += "<option value='${item.name}'>${item.name}</option>\\n"
+                }
+            }
+
+            return html + "</select>"
+        ''')
+        fallbackScript('return ["<option value=\'error\'>Failed to fetch folders</option>"]')
+    }
+}
+
 pipeline {
     agent {
         kubernetes {
@@ -17,12 +60,6 @@ pipeline {
                 tty: true
             """
         }
-    }
-
-    parameters {
-        string(name: 'JIRA_URL', description: 'Enter the JIRA URL')
-        choice(name: 'PROJECT', choices: ['payment', 'coin', 'platform'], description: 'Select the project folder')
-        choice(name: 'REDIS_FOLDER', choices: ['keydb-shared-payment', 'another-redis', 'keydb-payment'], description: 'Select Redis folder')
     }
 
     environment {
@@ -58,7 +95,7 @@ pipeline {
             steps {
                 container('git-cli') {
                     script {
-                        def redisFolder = params.REDIS_FOLDER // Manually selected folder
+                        def redisFolder = params.REDIS_FOLDER // Use the dynamically selected folder
                         def projectPath = "${WORKSPACE_PATH}/${params.PROJECT}/${redisFolder}"
                         echo "🔍 Checking for files in: ${projectPath}"
 
@@ -72,7 +109,8 @@ pipeline {
                         if (!redisConfig.containsKey("redis_instances") || redisConfig.redis_instances.isEmpty()) {
                             error "❌ Invalid or missing 'redis_instances' in config.json"
                         }
-
+                        
+                        // Ensure all Redis IPs include port 6390
                         def redisInstances = redisConfig.redis_instances.collect { 
                             it.contains(":") ? it.trim() : it.trim() + ":" + env.DEFAULT_REDIS_PORT 
                         }
@@ -113,6 +151,7 @@ pipeline {
                             keysToDelete.each { key ->
                                 echo "🔍 Checking if key exists: ${key} on Redis: ${host}:${port}"
 
+                                // Get the list of actual keys matching the pattern
                                 def redisCommand = "redis-cli -h ${host} -p ${port} --scan --pattern '${key}'"
                                 echo "✅ Running Redis check command: ${redisCommand}"
 
