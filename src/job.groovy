@@ -6,7 +6,7 @@ pipelineJob('ongky_test') {
         stringParam('JIRA_URL', '', 'Enter the JIRA URL')
 
         // Choice parameter for selecting the project
-        choiceParam('PROJECT', ['payment', 'coin', 'platform'], 'Select the project folder')
+        choiceParam('PROJECT', ['payment', 'coin', 'platform', 'bank'], 'Select the project folder')
 
         // Active Choices Reactive Reference Parameter for Redis Folder
         activeChoiceReactiveReferenceParam('REDIS_FOLDER') {
