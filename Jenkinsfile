@@ -27,7 +27,7 @@ pipeline {
         activeChoiceReactiveParam(name: 'REDIS_FOLDER', description: 'Select Redis Folder based on selected Project') {
             filterable()
             groovyScript {
-                script('''
+                script("""
 import groovy.json.JsonSlurper
 
 // Dynamically use the selected project from the PROJECT parameter
@@ -57,7 +57,7 @@ jsonResponse.each { item ->
 
 html += '''</select>'''
 return html
-''')
+""")
                 fallbackScript('["error"]')
             }
         }
