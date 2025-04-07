@@ -16,13 +16,9 @@ pipelineJob('ongky_test') {
                 script("""
 import groovy.json.JsonSlurper
 
-
 // Get the selected project from Jenkins parameters (e.g., payment, coin, platform)
-//def project = build.buildVariableResolver.resolve("PROJECT") // PROJECT is passed as a parameter
-
-// Construct the URL to fetch the contents of the selected project inside 'stg'
 def githubRepoUrl = 'https://api.github.com/repos/ongkyokta/redis-key/contents/'
-def tribeName = "stg/"+PROJECT // Dynamically use the selected project
+def tribeName = "stg/" + PROJECT // Dynamically use the selected project
 
 def url = githubRepoUrl + tribeName
 
@@ -35,24 +31,18 @@ def jsonResponse = new JsonSlurper().parseText(process.text)
 
 // Initialize an array to hold the folder names (keydb folders)
 def folderList = []
-html=
-'''
-<select name="value">
-'''
+def html = '''<select name="value">'''
 
 // Loop through the response and collect the names of subdirectories (keydb folders)
 jsonResponse.each { item ->
     if (item.type == 'dir') { // Only consider directories (keydb folders)
         folderList.add(item.name) // Add the directory name to the list
-        html = html+"<option value="+item.name+">"+item.name+"</option>"+"\n"
+        html = html + "<option value=\"" + item.name + "\">" + item.name + "</option>" + "\\n"
     }
 }
 
-
-return html = html+'''
-</select>
-'''
-
+html = html + '''</select>'''
+return html
 """)
                 fallbackScript("""
                     return ["<option value='error'>Failed to fetch folders</option>"]
@@ -62,5 +52,5 @@ return html = html+'''
         }
     }
 
-    // Add any additional configurations like triggers, log rotation, etc..
+    // Add any additional configurations like triggers, log rotation, etc.
 }
