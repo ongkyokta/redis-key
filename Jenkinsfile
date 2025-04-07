@@ -40,17 +40,17 @@ pipeline {
             }
         }
 
-        // stage('Prepare Workspace') {
-        //     steps {
-        //         container('git-cli') {
-        //             script {
-        //                 echo "🔄 Cloning repository: ${REPO_URL}"
-        //                 deleteDir()
-        //                 sh "git clone ${REPO_URL} ."
-        //             }
-        //         }
-        //     }
-        // }
+        stage('Prepare Workspace') {
+            steps {
+                container('git-cli') {
+                    script {
+                        echo "🔄 Cloning repository: ${REPO_URL}"
+                        deleteDir()
+                        sh "git clone ${REPO_URL} ."
+                    }
+                }
+            }
+        }
 
         stage('Extract JIRA Key') {
             steps {
