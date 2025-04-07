@@ -5,7 +5,7 @@ properties([
     ])
 ])
 
-activeChoiceReactiveParam(name: 'REDIS_FOLDER', description: 'Select Redis Folder based on selected Project') {
+activeChoiceReactiveReferenceParam(name: 'REDIS_FOLDER', description: 'Select Redis Folder based on selected Project') {
     filterable()
     choiceType('FORMATTED_HTML')
     groovyScript {
