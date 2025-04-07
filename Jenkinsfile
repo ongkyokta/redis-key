@@ -9,11 +9,11 @@ activeChoiceReactiveParam(name: 'REDIS_FOLDER', description: 'Select Redis Folde
     filterable()
     choiceType('FORMATTED_HTML')
     groovyScript {
-        script('''
+        script("""
             import groovy.json.JsonSlurper
 
             def githubRepoUrl = 'https://api.github.com/repos/ongkyokta/redis-key/contents/'
-            def tribeName = "stg/" + PROJECT // Dynamically use the selected project
+            def tribeName = "stg/\${PROJECT}" // Dynamically use the selected project
 
             def url = githubRepoUrl + tribeName
 
@@ -36,8 +36,10 @@ activeChoiceReactiveParam(name: 'REDIS_FOLDER', description: 'Select Redis Folde
 
             html.append("</select>")
             return html.toString()
-        ''')
-        fallbackScript('return ["<option value=\\'error\\'>Failed to fetch folders</option>"]')
+        """)
+        fallbackScript("""
+            return ["<option value=\\"error\\">Failed to fetch folders</option>"]
+        """)
     }
 }
 
