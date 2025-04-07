@@ -24,20 +24,20 @@ activeChoiceReactiveParam(name: 'REDIS_FOLDER', description: 'Select Redis Folde
             // Parse the response from the GitHub API
             def jsonResponse = new JsonSlurper().parseText(process.text)
 
-            def html = '''
-            <select name="value">
-            '''
+            def html = new StringBuilder()
+            html.append("<select name=\\"value\\">")
 
             // Loop through the response and collect the names of subdirectories
             jsonResponse.each { item ->
                 if (item.type == 'dir') {
-                    html += "<option value='${item.name}'>${item.name}</option>\\n"
+                    html.append("<option value=\\"${item.name}\\">${item.name}</option>\\n")
                 }
             }
 
-            return html + "</select>"
+            html.append("</select>")
+            return html.toString()
         ''')
-        fallbackScript('return ["<option value=\'error\'>Failed to fetch folders</option>"]')
+        fallbackScript('return ["<option value=\\'error\\'>Failed to fetch folders</option>"]')
     }
 }
 
