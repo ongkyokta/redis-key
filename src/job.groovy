@@ -14,8 +14,7 @@ pipelineJob('ongky_test') {
         // Active Choices Reactive Reference Parameter for Redis Folder
         activeChoiceReactiveReferenceParam('REDIS_FOLDER') {
             description('Select Redis Folder based on selected Project')
-            filterable()
-            choiceType('FORMATTED_HTML')
+            choiceType('FORMATTED_HTML')  // Specify the choice type
             groovyScript {
                 script("""
 import groovy.json.JsonSlurper
