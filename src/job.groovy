@@ -37,7 +37,7 @@ def html = '''<select name="value">'''
 jsonResponse.each { item ->
     if (item.type == 'dir') { // Only consider directories (keydb folders)
         folderList.add(item.name) // Add the directory name to the list
-        html = html+"<option value="+item.name+">"+item.name+"</option>"+"\n"
+        html = html + "<option value='" + item.name + "'>" + item.name + "</option>" + "\\n"
     }
 }
 
