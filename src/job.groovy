@@ -20,6 +20,7 @@ import groovy.json.JsonSlurper
 def githubRepoUrl = 'https://api.github.com/repos/ongkyokta/redis-key/contents/'
 def tribeName = "stg/" + PROJECT // Dynamically use the selected project
 
+// Ensure the URL is properly constructed without any trailing commas
 def url = githubRepoUrl + tribeName
 
 // Execute the curl command to fetch the directory contents from GitHub API
