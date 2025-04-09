@@ -49,7 +49,7 @@ return html
                 """)
             }
             referencedParameter('PROJECT')
-            omitValueField: true
+            omitValueField(true)  // Correct usage of omitValueField
         }
     }
 
