@@ -49,6 +49,7 @@ return html
                 """)
             }
             referencedParameter('PROJECT')
+            omitValueField: true
         }
     }
 
