@@ -66,8 +66,8 @@ pipeline {
             steps {
                 container('git-cli') {
                     script {
-                        def projectPath = "${WORKSPACE_PATH}/${params.PROJECT}/keydb-shared-payment"
-                        echo "🔍 Checking for files in: ${projectPath}"
+                        def projectPath = "${WORKSPACE_PATH}/${params.PROJECT}/${params.REDIS_FOLDER}"
+                        echo "📁 Using project path: ${projectPath}"
 
                         def configFile = "${projectPath}/config.json"
                         if (!fileExists(configFile)) {
@@ -79,8 +79,7 @@ pipeline {
                         if (!redisConfig.containsKey("redis_instances") || redisConfig.redis_instances.isEmpty()) {
                             error "❌ Invalid or missing 'redis_instances' in config.json"
                         }
-                        
-                        // Ensure all Redis IPs include port 6390
+
                         def redisInstances = redisConfig.redis_instances.collect { 
                             it.contains(":") ? it.trim() : it.trim() + ":" + env.DEFAULT_REDIS_PORT 
                         }
@@ -96,8 +95,8 @@ pipeline {
                         if (!ticketData.containsKey("keys") || ticketData.keys.isEmpty()) {
                             error "❌ Invalid or missing 'keys' in ${env.JIRA_KEY}.json"
                         }
-                        def keysToDelete = ticketData.keys.collect { it.trim() } // Trim keys to prevent issues
 
+                        def keysToDelete = ticketData.keys.collect { it.trim() }
                         echo "Keys to delete: ${keysToDelete.join(', ')}"
 
                         env.REDIS_INSTANCES = redisInstances.join(',')
